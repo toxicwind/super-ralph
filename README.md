@@ -1,10 +1,17 @@
+
 # super-ralph
 
 > Reusable Ralph workflow - ticket-driven development with multi-agent review loops
 
+> Fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph),
+> with all model calls routed through a local nim-proxy (see below).
+
 An opinionated [Smithers](https://smithers.sh) workflow. You just provide the specs, this workflow does the rest.
 
-Supports subscriptions.
+Deeper docs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (full Smithers
+orchestration design) and
+[docs/CLI_CLARIFICATIONS.md](docs/CLI_CLARIFICATIONS.md) (how the
+clarifying-questions phase works).
 
 ## Installation
 
@@ -24,18 +31,18 @@ super-ralph ./PROMPT.md
 What the CLI does:
 - Preflight checks for `jj` and gives install/setup instructions if missing
 - Auto-detects `claude` and `codex` CLIs on startup
+- Asks clarifying questions in an interactive terminal UI (skip with `--skip-questions`)
 - Runs a first planning pass that interprets your prompt into `SuperRalph` props (focuses, test/build commands, checks, etc.)
 - Generates a runnable workflow at `.super-ralph/generated/workflow.tsx`
-- Runs Smithers with a built-in OpenTUI monitor
-- Emits throttled status reports every 5 minutes from workflow outputs + git history deltas
-- Detects error patterns and suggests likely fixes
-- If `gh` is installed, prepares issue drafts and prints `gh issue create` commands
+- Runs Smithers with a built-in OpenTUI monitor (live terminal dashboard)
+- Resolves nim-proxy routing once at startup so every model call goes through the proxy
 
 Useful options:
 
 ```bash
-super-ralph ./PROMPT.md --max-concurrency 12 --report-interval-minutes 5
+super-ralph ./PROMPT.md --max-concurrency 12
 super-ralph ./PROMPT.md --dry-run
+super-ralph ./PROMPT.md --skip-questions
 ```
 
 ## Usage
@@ -49,8 +56,6 @@ import {
   createSmithers,
   ClaudeCodeAgent,
   CodexAgent,
-  GeminiAgent,
-  KimiAgent,
 } from "smithers-orchestrator";
 import PRD from "./specs/PRD.mdx";
 import EngineeringSpec from "./specs/Engineering.mdx";
@@ -82,8 +87,8 @@ export default smithers((ctx) => (
       implementation: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
       testing: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
       reviewing: new CodexAgent({ model: "gpt-5.3-codex", cwd: process.cwd(), yolo: true }),
-      reporting: new GeminiAgent({ model: "gemini-2.5-pro", cwd: process.cwd(), yolo: true }),
-      mergeQueue: new KimiAgent({ model: "kimi-code/kimi-for-coding", cwd: process.cwd(), yolo: true, thinking: true }),
+      reporting: new CodexAgent({ model: "gpt-5.3-codex", cwd: process.cwd(), yolo: true }),
+      mergeQueue: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
     }}
   >
     <PRD />
@@ -127,28 +132,46 @@ silently falling back to direct APIs.
 
 ## The Pattern
 
-Under the hood this opinionated workflow is the following steps all in parallel in a pipeline
+Tickets are the **work unit**; **jobs are the scheduling unit**. An AI
+scheduler (`TicketScheduler`, driven by the scheduler agent in your agent
+pool) watches the ticket pipeline and writes jobs into a `scheduled_tasks`
+table in the Smithers SQLite DB (`src/scheduledTasks.ts`, via `bun:sqlite`).
+Three loops then run continuously and in parallel:
 
 ```
 Ralph (infinite loop)
-  ├─ UpdateProgress → PROGRESS.md
-  ├─ CodebaseReview → per-focus reviews → tickets
-  ├─ Discover → new feature tickets
-  ├─ IntegrationTest → per-focus test runs
-  └─ Per Ticket × N (parallel)
-     ├─ Phase 1: Development (in worktree, on branch ticket/<id>)
-     │  ├─ Research → gather context
-     │  ├─ Plan → TDD plan
-     │  ├─ ValidationLoop (loops until approved)
-     │  │  ├─ Implement → write tests + code
-     │  │  ├─ Test → run fast tests (pre-land checks)
-     │  │  ├─ BuildVerify → check compilation
-     │  │  ├─ SpecReview + CodeReview (parallel)
-     │  │  └─ ReviewFix → fix issues
-     │  └─ Report → completion summary
-     └─ Phase 2: Landing (speculative merge queue)
-        └─ Land → speculative rebase stack, parallel post-land CI, eviction + cascade re-test, fast-forward main, push
+  ├─ Scheduler loop ── AI scheduler → scheduled_tasks (SQLite)
+  │     ├─ UpdateProgress → PROGRESS.md
+  │     ├─ CodebaseReview → per-focus reviews → tickets
+  │     ├─ Discover → new feature tickets
+  │     └─ IntegrationTest → per-focus test runs
+  ├─ Execution loop ── one Job per scheduled job, in parallel worktrees
+  │     └─ Per Job (on jj bookmark ticket/<id>)
+  │        ├─ Research → gather context
+  │        ├─ Plan → TDD plan
+  │        ├─ ValidationLoop (loops until approved)
+  │        │  ├─ Implement → write tests + code
+  │        │  ├─ Test → run fast tests (pre-land checks)
+  │        │  ├─ BuildVerify → check compilation
+  │        │  ├─ SpecReview + CodeReview (parallel)
+  │        │  └─ ReviewFix → fix issues
+  │        └─ Report → completion summary
+  └─ Merge queue loop ── speculative landing, runs independently
+        └─ Land → speculative rebase stack, parallel post-land CI,
+                   eviction + cascade re-test, fast-forward main, push
 ```
+
+The scheduler only schedules when there is capacity (`maxConcurrency`), and
+jobs are derived from *all* scheduler outputs — not just the latest — so no
+scheduled work is lost between scheduler iterations.
+
+### Live monitor
+
+`Monitor` (`src/components/Monitor.tsx`) is an OpenTUI terminal dashboard
+that runs alongside the workflow: a real-time task list with status
+indicators, arrow-key navigation into task details, and overall progress —
+all polled live from the Smithers SQLite DB. It starts automatically with the
+CLI-generated workflow.
 
 ### Real speculative merge queue
 
@@ -165,7 +188,8 @@ This means **no code lands on main without passing reviews AND post-rebase CI on
 
 ### Dedicated merge queue agent
 
-`SuperRalph` now supports a dedicated coordinator agent:
+`SuperRalph` supports a dedicated coordinator agent — any
+`smithers-orchestrator` agent works here, e.g.:
 
 ```tsx
 <SuperRalph
@@ -249,3 +273,4 @@ These steps default to <SuperRalph.Component when not provided.
 ## License
 
 MIT
+
