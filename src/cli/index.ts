@@ -468,7 +468,7 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }, 80);
 
   let claudeResult: string;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.NVIDIA_API_KEY;
   const baseUrl = process.env.ANTHROPIC_BASE_URL;
   const model = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "claude-opus-4-6";
 
