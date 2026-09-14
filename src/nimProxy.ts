@@ -79,7 +79,7 @@ export function resolveProxyConfig(): ProxyConfig {
   }
   const baseUrl = (
     process.env.NIM_PROXY_BASE_URL || DEFAULT_PROXY_BASE_URL
-  ).replace(/\/+$/, "");
+  ).replace(/\/+$/, "").replace(/\/v1$/, "");
   const model = process.env.NIM_PROXY_MODEL || DEFAULT_PROXY_MODEL;
   return { baseUrl, apiKeys, model, bypass: false };
 }
@@ -95,9 +95,12 @@ export function proxyEnvOverrides(
   config: ProxyConfig
 ): Record<string, string> {
   if (config.bypass || config.apiKeys.length === 0) return {};
+  // The claude NIM shim fetches NIM_BASE_URL + "/chat/completions", so the
+  // /v1 prefix must be part of NIM_BASE_URL itself. resolveProxyConfig
+  // canonicalizes baseUrl to the bare origin (trailing /v1 stripped).
   return {
     ANTHROPIC_BASE_URL: config.baseUrl,
-    NIM_BASE_URL: config.baseUrl,
+    NIM_BASE_URL: config.baseUrl + "/v1",
     NVIDIA_API_KEY: config.apiKeys[0],
     NIM_MODEL: config.model,
   };

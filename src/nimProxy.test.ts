@@ -122,10 +122,20 @@ describe("bypass", () => {
 describe("proxyEnvOverrides", () => {
   test("sets shim-compatible env vars", () => {
     const env = proxyEnvOverrides(fakeConfig(["npk-primary"]));
-    expect(env.NIM_BASE_URL).toBe("http://127.0.0.1:8000");
+    expect(env.NIM_BASE_URL).toBe("http://127.0.0.1:8000/v1");
     expect(env.ANTHROPIC_BASE_URL).toBe("http://127.0.0.1:8000");
     expect(env.NVIDIA_API_KEY).toBe("npk-primary");
     expect(env.NIM_MODEL).toBe("openai/gpt-oss-20b");
+  });
+
+  test("canonicalizes a trailing /v1 in NIM_PROXY_BASE_URL", () => {
+    process.env.NIM_PROXY_API_KEY = "npk-primary";
+    process.env.NIM_PROXY_BASE_URL = "http://proxy.local:9000/v1/";
+    const cfg = resolveProxyConfig();
+    expect(cfg.baseUrl).toBe("http://proxy.local:9000");
+    const env = proxyEnvOverrides(cfg);
+    expect(env.NIM_BASE_URL).toBe("http://proxy.local:9000/v1");
+    expect(env.ANTHROPIC_BASE_URL).toBe("http://proxy.local:9000");
   });
 });
 
@@ -221,7 +231,7 @@ describe("proxyChatCompletions", () => {
       ok: false,
       headers: new Headers({ "retry-after": "30" }),
       text: async () => "limited",
-    })) as unknown as Response as typeof fetch;
+    })) as unknown as typeof fetch;
 
     let err: unknown;
     try {
@@ -240,7 +250,7 @@ describe("proxyChatCompletions", () => {
       ok: false,
       headers: new Headers(),
       text: async () => "proxy exploded",
-    })) as unknown as Response as typeof fetch;
+    })) as unknown as typeof fetch;
 
     await expect(
       proxyChatCompletions({ prompt: "hi", config: fakeConfig(["k1"]) })
