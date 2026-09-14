@@ -94,6 +94,37 @@ export default smithers((ctx) => (
 
 That's it! 30 lines of configuration for a complete workflow.
 
+## Model routing via nim-proxy
+
+By default every model call goes through the local nim-proxy
+(http://127.0.0.1:8000, OpenAI-compatible) instead of direct provider APIs.
+
+How it works:
+
+- The CLI resolves NIM_PROXY_API_KEY once at startup (comma-separated for
+  multi-key rotation, with 429/backoff rotation across keys) and injects
+  NIM_BASE_URL (with /v1), NVIDIA_API_KEY, ANTHROPIC_BASE_URL and NIM_MODEL
+  into its own env. Every downstream child process -- the claude NIM shim,
+  generated smithers workflows, interactive UI -- inherits proxy routing.
+  Keys travel in process env only and are never written to files.
+- Clarifying-question generation uses proxyChatCompletions() directly
+  against the proxy.
+- Smithers ClaudeCodeAgent blanks ANTHROPIC_API_KEY on spawn but passes
+  NIM_BASE_URL / NVIDIA_API_KEY through untouched, which is exactly what the
+  claude NIM shim reads.
+
+Env knobs:
+
+- NIM_PROXY_API_KEY: proxy key (required; comma-separated enables rotation).
+  Falls back to ANTHROPIC_API_KEY / NVIDIA_API_KEY when unset.
+- NIM_PROXY_BASE_URL: proxy origin, default http://127.0.0.1:8000
+  (a trailing /v1 is stripped for canonicalization).
+- NIM_PROXY_MODEL: model id sent to the proxy, default openai/gpt-oss-20b.
+- NIM_PROXY_BYPASS=1: escape hatch -- restore pre-proxy direct behavior.
+
+With no key set the CLI fails fast with an actionable error instead of
+silently falling back to direct APIs.
+
 ## The Pattern
 
 Under the hood this opinionated workflow is the following steps all in parallel in a pipeline
