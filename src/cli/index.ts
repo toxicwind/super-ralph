@@ -21,6 +21,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { getClarificationQuestions } from "./clarifications.ts";
 
 type ParsedArgs = {
   positional: string[];
@@ -418,6 +419,12 @@ async function runClarifyingQuestions(
   packageScripts: Record<string, string>,
   dryRun: boolean = false,
 ): Promise<any> {
+  // Early return for dry-run: no API call, no spinner
+  if (dryRun) {
+    const questions = getClarificationQuestions();
+    return { questions, answers: null, summary: null, dryRun: true };
+  }
+
   const scriptsBlock = Object.entries(packageScripts)
     .map(([name, cmd]) => `- ${name}: ${cmd}`)
     .join("\n");
@@ -571,10 +578,6 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }
 
   console.log(`✅ Generated ${questions.length} questions\n`);
-
-  if (dryRun) {
-    return { questions, answers: null, summary: null, dryRun: true };
-  }
 
   // Write questions to temp file and launch interactive UI
   const tempDir = join(repoRoot, ".super-ralph", "temp");
