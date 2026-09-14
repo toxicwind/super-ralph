@@ -416,6 +416,7 @@ async function runClarifyingQuestions(
   promptText: string,
   repoRoot: string,
   packageScripts: Record<string, string>,
+  dryRun: boolean = false,
 ): Promise<any> {
   const scriptsBlock = Object.entries(packageScripts)
     .map(([name, cmd]) => `- ${name}: ${cmd}`)
@@ -467,41 +468,73 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }, 80);
 
   let claudeResult: string;
-  try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("no-api-key");
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const baseUrl = process.env.ANTHROPIC_BASE_URL;
+  const model = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "claude-opus-4-6";
 
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
-        messages: [{ role: "user", content: questionGenPrompt }],
-      }),
-    });
+  if (apiKey && baseUrl) {
+    // Proxy detected — use OpenAI chat completions format
+    try {
+      const url = `${baseUrl.replace(/\/v1$/, "")}/v1/chat/completions`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          messages: [{ role: "user", content: questionGenPrompt }],
+        }),
+      });
+      clearInterval(spinInterval);
+      process.stdout.write("\r\x1b[K");
+      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json() as any;
+      claudeResult = data.choices?.[0]?.message?.content ?? "";
+      if (!claudeResult.trim()) throw new Error("Empty API response");
+    } catch (apiErr: any) {
+      clearInterval(spinInterval);
+      process.stdout.write("\r\x1b[K");
+      throw apiErr;
+    }
+  } else if (apiKey) {
+    // Direct Anthropic API
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-opus-4-6",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: questionGenPrompt }],
+        }),
+      });
+      clearInterval(spinInterval);
+      process.stdout.write("\r\x1b[K");
+      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json() as any;
+      claudeResult = data.content?.[0]?.text ?? "";
+      if (!claudeResult.trim()) throw new Error("Empty API response");
+    } catch (apiErr: any) {
+      clearInterval(spinInterval);
+      process.stdout.write("\r\x1b[K");
+      throw apiErr;
+    }
+  }
 
-    clearInterval(spinInterval);
-    process.stdout.write("\r\x1b[K");
-
-    if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
-    const data = await resp.json() as any;
-    claudeResult = data.content?.[0]?.text ?? "";
-    if (!claudeResult.trim()) throw new Error("Empty API response");
-  } catch (apiErr: any) {
-    clearInterval(spinInterval);
-    process.stdout.write("\r\x1b[K");
-
+  if (!claudeResult) {
     // Fallback to claude --print if API call fails (e.g. no API key)
     console.log("⚠️  API call failed, falling back to claude CLI...\n");
-    const claudeEnv = { ...process.env, ANTHROPIC_API_KEY: "" };
+    const claudeEnv = { ...process.env };
     delete (claudeEnv as any).CLAUDECODE;
     const fallbackProc = Bun.spawn([
-      "claude", "--print", "--output-format", "text", "--model", "claude-opus-4-6",
+      "claude", "--print", "--output-format", "text", "--model", model,
       questionGenPrompt,
     ], {
       cwd: repoRoot,
@@ -538,6 +571,10 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }
 
   console.log(`✅ Generated ${questions.length} questions\n`);
+
+  if (dryRun) {
+    return { questions, answers: null, summary: null, dryRun: true };
+  }
 
   // Write questions to temp file and launch interactive UI
   const tempDir = join(repoRoot, ".super-ralph", "temp");
@@ -630,7 +667,7 @@ async function main() {
   // Step 1: Clarifying questions (unless --skip-questions)
   let clarificationSession: any = null;
   if (!parsed.flags["skip-questions"]) {
-    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts);
+    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"]);
   }
 
   // Generate workflow file
