@@ -22,6 +22,13 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { getClarificationQuestions } from "./clarifications.ts";
+import {
+  resolveProxyConfig,
+  proxyEnvOverrides,
+  proxyChatCompletions,
+  isProxyBypassed,
+  type ProxyConfig,
+} from "../nimProxy.ts";
 
 type ParsedArgs = {
   positional: string[];
@@ -418,6 +425,7 @@ async function runClarifyingQuestions(
   repoRoot: string,
   packageScripts: Record<string, string>,
   dryRun: boolean = false,
+  proxyConfig: ProxyConfig | null = null,
 ): Promise<any> {
   // Early return for dry-run: no API call, no spinner
   if (dryRun) {
@@ -475,89 +483,110 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }, 80);
 
   let claudeResult: string;
-  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.NVIDIA_API_KEY;
-  const baseUrl = process.env.ANTHROPIC_BASE_URL;
-  const model = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "claude-opus-4-6";
+  const useProxy = !!proxyConfig && !proxyConfig.bypass;
 
-  if (apiKey && baseUrl) {
-    // Proxy detected — use OpenAI chat completions format
+  if (useProxy) {
+    // Maximal nim-proxy path: question generation goes through the proxy
+    // with multi-key 429 rotation (see src/nimProxy.ts).
     try {
-      const url = `${baseUrl.replace(/\/v1$/, "")}/v1/chat/completions`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 4096,
-          messages: [{ role: "user", content: questionGenPrompt }],
-        }),
+      claudeResult = await proxyChatCompletions({
+        prompt: questionGenPrompt,
+        model: (proxyConfig as ProxyConfig).model,
+        maxTokens: 4096,
+        config: proxyConfig as ProxyConfig,
       });
+    } finally {
       clearInterval(spinInterval);
       process.stdout.write("\r\x1b[K");
-      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
-      const data = await resp.json() as any;
-      claudeResult = data.choices?.[0]?.message?.content ?? "";
-      if (!claudeResult.trim()) throw new Error("Empty API response");
-    } catch (apiErr: any) {
-      clearInterval(spinInterval);
-      process.stdout.write("\r\x1b[K");
-      throw apiErr;
     }
-  } else if (apiKey) {
-    // Direct Anthropic API
-    try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-opus-4-6",
-          max_tokens: 4096,
-          messages: [{ role: "user", content: questionGenPrompt }],
-        }),
+    if (!claudeResult.trim()) throw new Error("nim-proxy returned an empty response");
+  } else {
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.NVIDIA_API_KEY;
+    const baseUrl = process.env.ANTHROPIC_BASE_URL;
+    const model = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "claude-opus-4-6";
+
+    if (apiKey && baseUrl) {
+      // Proxy detected — use OpenAI chat completions format
+      try {
+        const url = `${baseUrl.replace(/\/v1$/, "")}/v1/chat/completions`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 4096,
+            messages: [{ role: "user", content: questionGenPrompt }],
+          }),
+        });
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+        const data = await resp.json() as any;
+        claudeResult = data.choices?.[0]?.message?.content ?? "";
+        if (!claudeResult.trim()) throw new Error("Empty API response");
+      } catch (apiErr: any) {
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        throw apiErr;
+      }
+    } else if (apiKey) {
+      // Direct Anthropic API
+      try {
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-6",
+            max_tokens: 4096,
+            messages: [{ role: "user", content: questionGenPrompt }],
+          }),
+        });
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+        const data = await resp.json() as any;
+        claudeResult = data.content?.[0]?.text ?? "";
+        if (!claudeResult.trim()) throw new Error("Empty API response");
+      } catch (apiErr: any) {
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        throw apiErr;
+      }
+    }
+
+    if (!claudeResult) {
+      // Fallback to claude --print if API call fails (e.g. no API key)
+      console.log("⚠️  API call failed, falling back to claude CLI...\n");
+      const claudeEnv = { ...process.env };
+      delete (claudeEnv as any).CLAUDECODE;
+      const fallbackProc = Bun.spawn([
+        "claude", "--print", "--output-format", "text", "--model", model,
+        questionGenPrompt,
+      ], {
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: claudeEnv,
       });
-      clearInterval(spinInterval);
-      process.stdout.write("\r\x1b[K");
-      if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
-      const data = await resp.json() as any;
-      claudeResult = data.content?.[0]?.text ?? "";
-      if (!claudeResult.trim()) throw new Error("Empty API response");
-    } catch (apiErr: any) {
-      clearInterval(spinInterval);
-      process.stdout.write("\r\x1b[K");
-      throw apiErr;
+      const fallbackOut = await new Response(fallbackProc.stdout).text();
+      const fallbackErr = await new Response(fallbackProc.stderr).text();
+      const fallbackCode = await fallbackProc.exited;
+      if (fallbackCode !== 0 || !fallbackOut.trim()) {
+        throw new Error(`claude --print failed (code ${fallbackCode}): ${fallbackErr}`);
+      }
+      claudeResult = fallbackOut.trim();
     }
-  }
 
-  if (!claudeResult) {
-    // Fallback to claude --print if API call fails (e.g. no API key)
-    console.log("⚠️  API call failed, falling back to claude CLI...\n");
-    const claudeEnv = { ...process.env };
-    delete (claudeEnv as any).CLAUDECODE;
-    const fallbackProc = Bun.spawn([
-      "claude", "--print", "--output-format", "text", "--model", model,
-      questionGenPrompt,
-    ], {
-      cwd: repoRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: claudeEnv,
-    });
-    const fallbackOut = await new Response(fallbackProc.stdout).text();
-    const fallbackErr = await new Response(fallbackProc.stderr).text();
-    const fallbackCode = await fallbackProc.exited;
-    if (fallbackCode !== 0 || !fallbackOut.trim()) {
-      throw new Error(`claude --print failed (code ${fallbackCode}): ${fallbackErr}`);
-    }
-    claudeResult = fallbackOut.trim();
-  }
 
+
+  }
   // Parse the JSON response — extract JSON from possible markdown fences
   let questions: any[];
   try {
@@ -628,6 +657,28 @@ async function main() {
     process.exit(parsed.flags.help ? 0 : 1);
   }
 
+  // -- nim-proxy: route every model call through the proxy by default --
+  // The CLI resolves the proxy key once here and injects NIM_BASE_URL /
+  // NVIDIA_API_KEY / ANTHROPIC_BASE_URL into its own env, so every downstream
+  // child process (claude NIM shim, smithers workflow, interactive UI)
+  // inherits proxy routing. Keys stay in env - never written to disk.
+  const isDryRun = parsed.flags["dry-run"] === true;
+  let proxyConfig: ProxyConfig | null = null;
+  if (!isProxyBypassed() && !isDryRun) {
+    // Throws NimProxyConfigError with an actionable message when no key is set.
+    proxyConfig = resolveProxyConfig();
+    const proxyEnv = proxyEnvOverrides(proxyConfig);
+    for (const [name, value] of Object.entries(proxyEnv)) {
+      process.env[name] = value;
+    }
+    console.log(
+      "nim-proxy: routing all model calls through " + proxyConfig.baseUrl +
+      " (" + proxyConfig.apiKeys.length + " key(s), model " + proxyConfig.model + ")"
+    );
+  } else if (isProxyBypassed()) {
+    console.log("nim-proxy: bypassed via NIM_PROXY_BYPASS=1 (direct provider behavior)");
+  }
+
   const repoRoot = resolve(
     typeof parsed.flags.cwd === "string" ? parsed.flags.cwd : process.cwd(),
   );
@@ -670,7 +721,7 @@ async function main() {
   // Step 1: Clarifying questions (unless --skip-questions)
   let clarificationSession: any = null;
   if (!parsed.flags["skip-questions"]) {
-    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"]);
+    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"], proxyConfig);
   }
 
   // Generate workflow file
