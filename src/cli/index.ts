@@ -335,6 +335,13 @@ const { smithers, outputs, Workflow } = createSmithers(
   { dbPath: DB_PATH }
 );
 
+// Proxy routing: the super-ralph CLI injects NIM_BASE_URL (with /v1),
+// NVIDIA_API_KEY, ANTHROPIC_BASE_URL and NIM_MODEL into its own env before
+// spawning this workflow, so every ClaudeCodeAgent child inherits proxy
+// routing automatically. ClaudeCodeAgent blanks ANTHROPIC_API_KEY on spawn
+// but passes NIM_BASE_URL/NVIDIA_API_KEY through untouched, which is what
+// the claude NIM shim reads. Never bake key values into this generated
+// file; keys travel in process env only.
 function createClaude(systemPrompt: string) {
   return new ClaudeCodeAgent({
     model: "claude-sonnet-4-6",
