@@ -4,7 +4,7 @@
 > Reusable Ralph workflow - ticket-driven development with multi-agent review loops
 
 > Fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph),
-> with all model calls routed through a local nim-proxy (see below).
+> with all model calls routed through the local flock proxy (see below).
 
 An opinionated [Smithers](https://smithers.sh) workflow. You just provide the specs, this workflow does the rest.
 
@@ -35,7 +35,7 @@ What the CLI does:
 - Runs a first planning pass that interprets your prompt into `SuperRalph` props (focuses, test/build commands, checks, etc.)
 - Generates a runnable workflow at `.super-ralph/generated/workflow.tsx`
 - Runs Smithers with a built-in OpenTUI monitor (live terminal dashboard)
-- Resolves nim-proxy routing once at startup so every model call goes through the proxy
+- Resolves flock proxy routing once at startup so every model call goes through the proxy
 
 Useful options:
 
@@ -99,14 +99,14 @@ export default smithers((ctx) => (
 
 That's it! 30 lines of configuration for a complete workflow.
 
-## Model routing via nim-proxy
+## Model routing via flock
 
-By default every model call goes through the local nim-proxy
+By default every model call goes through the local flock proxy
 (http://127.0.0.1:8000, OpenAI-compatible) instead of direct provider APIs.
 
 How it works:
 
-- The CLI resolves NIM_PROXY_API_KEY once at startup (comma-separated for
+- The CLI resolves FLOCK_API_KEY once at startup (comma-separated for
   multi-key rotation, with 429/backoff rotation across keys) and injects
   NIM_BASE_URL (with /v1), NVIDIA_API_KEY, ANTHROPIC_BASE_URL and NIM_MODEL
   into its own env. Every downstream child process -- the claude NIM shim,
@@ -120,12 +120,13 @@ How it works:
 
 Env knobs:
 
-- NIM_PROXY_API_KEY: proxy key (required; comma-separated enables rotation).
+- FLOCK_API_KEY: proxy client key (required; comma-separated enables rotation).
+  NIM_PROXY_API_KEY still accepted as a deprecated alias.
   Falls back to ANTHROPIC_API_KEY / NVIDIA_API_KEY when unset.
-- NIM_PROXY_BASE_URL: proxy origin, default http://127.0.0.1:8000
+- FLOCK_BASE_URL: proxy origin, default http://127.0.0.1:8000 (NIM_PROXY_BASE_URL still accepted as fallback)
   (a trailing /v1 is stripped for canonicalization).
-- NIM_PROXY_MODEL: model id sent to the proxy, default openai/gpt-oss-20b.
-- NIM_PROXY_BYPASS=1: escape hatch -- restore pre-proxy direct behavior.
+- FLOCK_MODEL: model id sent to the proxy, default openai/gpt-oss-20b (NIM_PROXY_MODEL still accepted as fallback).
+- FLOCK_BYPASS=1 (or NIM_PROXY_BYPASS=1): escape hatch -- restore pre-proxy direct behavior.
 
 With no key set the CLI fails fast with an actionable error instead of
 silently falling back to direct APIs.

@@ -1,11 +1,11 @@
 /**
- * nimProxy — maximal nim-proxy integration for super-ralph.
+ * nimProxy — flock integration for super-ralph (nim-proxy absorbed by flock 2026-09-17).
  *
- * Routes every model call through the local nim-proxy (default
+ * Routes every model call through the local flock proxy (default
  * http://127.0.0.1:8000) instead of direct provider APIs:
  *
- * - `resolveProxyConfig()` reads NIM_PROXY_API_KEY (comma-separated for
- *   multi-key rotation), falling back to ANTHROPIC_API_KEY / NVIDIA_API_KEY.
+ * - `resolveProxyConfig()` reads FLOCK_API_KEY (comma-separated for
+ *   multi-key rotation), falling back to NIM_PROXY_API_KEY (deprecated alias), then ANTHROPIC_API_KEY / NVIDIA_API_KEY.
  *   Throws NimProxyConfigError with an actionable message when no key is set.
  * - `proxyEnvOverrides()` builds the env overrides (NIM_BASE_URL,
  *   ANTHROPIC_BASE_URL, NVIDIA_API_KEY, NIM_MODEL) that make the `claude`
@@ -17,14 +17,14 @@
  * - `proxyChatCompletions()` performs OpenAI-compatible chat completions
  *   against the proxy with per-key rotation on 429s.
  *
- * Escape hatch: NIM_PROXY_BYPASS=1 restores the pre-proxy direct behavior.
+ * Escape hatch: FLOCK_BYPASS=1 (or NIM_PROXY_BYPASS=1) restores the pre-proxy direct behavior.
  *
  * Security: key values are NEVER logged, printed, or written to files.
  * Stats and errors use opaque "key#N" labels only.
  */
 
 export const DEFAULT_PROXY_BASE_URL = "http://127.0.0.1:8000";
-export const DEFAULT_PROXY_MODEL = "openai/gpt-oss-20b";
+export const DEFAULT_PROXY_MODEL = "free";
 const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 export class NimProxyConfigError extends Error {
@@ -35,7 +35,7 @@ export class NimProxyConfigError extends Error {
 }
 
 export function isProxyBypassed(): boolean {
-  return process.env.NIM_PROXY_BYPASS === "1";
+  return process.env.FLOCK_BYPASS === "1" || process.env.NIM_PROXY_BYPASS === "1";
 }
 
 /**
@@ -44,13 +44,14 @@ export function isProxyBypassed(): boolean {
  */
 export function resolveProxyApiKey(): string {
   const key =
-    process.env.NIM_PROXY_API_KEY ||
+    process.env.FLOCK_API_KEY ||
+    process.env.NIM_PROXY_API_KEY || // deprecated compat alias
     process.env.ANTHROPIC_API_KEY ||
     process.env.NVIDIA_API_KEY;
   if (!key || !key.trim()) {
     throw new NimProxyConfigError(
-      "nim-proxy: no API key found. Set NIM_PROXY_API_KEY to your nim-proxy " +
-        "key (comma-separated for multi-key rotation), or set NIM_PROXY_BYPASS=1 " +
+      "flock: no API key found. Set FLOCK_API_KEY to your flock client " +
+        "key (comma-separated for multi-key rotation; NIM_PROXY_API_KEY still accepted as a deprecated alias), or set FLOCK_BYPASS=1 " +
         "to use the previous direct-provider behavior."
     );
   }
@@ -74,13 +75,13 @@ export function resolveProxyConfig(): ProxyConfig {
     .filter(Boolean);
   if (apiKeys.length === 0) {
     throw new NimProxyConfigError(
-      "nim-proxy: NIM_PROXY_API_KEY contained no usable keys."
+      "flock: FLOCK_API_KEY contained no usable keys."
     );
   }
   const baseUrl = (
-    process.env.NIM_PROXY_BASE_URL || DEFAULT_PROXY_BASE_URL
+    process.env.FLOCK_BASE_URL || process.env.NIM_PROXY_BASE_URL || DEFAULT_PROXY_BASE_URL
   ).replace(/\/+$/, "").replace(/\/v1$/, "");
-  const model = process.env.NIM_PROXY_MODEL || DEFAULT_PROXY_MODEL;
+  const model = process.env.FLOCK_MODEL || process.env.NIM_PROXY_MODEL || DEFAULT_PROXY_MODEL;
   return { baseUrl, apiKeys, model, bypass: false };
 }
 
@@ -243,7 +244,7 @@ export type ProxyChatOptions = {
 };
 
 /**
- * OpenAI-compatible chat completions through nim-proxy with per-key
+ * OpenAI-compatible chat completions through the flock proxy with per-key
  * rotation on 429s. Throws a descriptive error (no key material) when all
  * keys are exhausted or rate-limited.
  */
@@ -253,7 +254,7 @@ export async function proxyChatCompletions(
   const config = opts.config ?? resolveProxyConfig();
   if (config.bypass) {
     throw new NimProxyConfigError(
-      "nim-proxy: proxyChatCompletions called while NIM_PROXY_BYPASS=1."
+      "flock: proxyChatCompletions called while FLOCK_BYPASS=1."
     );
   }
   const pool = new NimProxyKeyPool(config.apiKeys);

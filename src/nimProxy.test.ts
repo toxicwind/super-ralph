@@ -17,6 +17,10 @@ import {
 } from "./nimProxy.ts";
 
 const ENV_KEYS = [
+  "FLOCK_API_KEY",
+  "FLOCK_BASE_URL",
+  "FLOCK_MODEL",
+  "FLOCK_BYPASS",
   "NIM_PROXY_API_KEY",
   "ANTHROPIC_API_KEY",
   "NVIDIA_API_KEY",
@@ -68,15 +72,16 @@ describe("key resolution", () => {
       err = e;
     }
     expect(err).toBeInstanceOf(NimProxyConfigError);
-    expect((err as Error).message).toContain("NIM_PROXY_API_KEY");
-    expect((err as Error).message).toContain("NIM_PROXY_BYPASS=1");
+    expect((err as Error).message).toContain("FLOCK_API_KEY");
+    expect((err as Error).message).toContain("FLOCK_BYPASS=1");
   });
 
-  test("prefers NIM_PROXY_API_KEY over legacy names", () => {
+  test("prefers FLOCK_API_KEY over NIM_PROXY_API_KEY", () => {
     process.env.NVIDIA_API_KEY = "nvapi-should-lose";
     process.env.ANTHROPIC_API_KEY = "sk-ant-should-lose";
-    process.env.NIM_PROXY_API_KEY = "npk-wins";
-    expect(resolveProxyApiKey()).toBe("npk-wins");
+    process.env.FLOCK_API_KEY = "flock-wins";
+    process.env.NIM_PROXY_API_KEY = "npk-loses";
+    expect(resolveProxyApiKey()).toBe("flock-wins");
   });
 
   test("falls back to NVIDIA_API_KEY", () => {
@@ -92,7 +97,7 @@ describe("key resolution", () => {
     expect(cfg.bypass).toBe(false);
   });
 
-  test("honors NIM_PROXY_BASE_URL and NIM_PROXY_MODEL overrides", () => {
+  test("honors FLOCK_BASE_URL and FLOCK_MODEL overrides (NIM_PROXY_* as fallback)", () => {
     process.env.NIM_PROXY_API_KEY = "npk-x";
     process.env.NIM_PROXY_BASE_URL = "http://proxy.local:9000/";
     process.env.NIM_PROXY_MODEL = "custom/model";
