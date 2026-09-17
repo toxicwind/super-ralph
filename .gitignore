@@ -14,4 +14,3 @@ github_*_pat.json
 .env*
 *secret*
 *token*
-.env
