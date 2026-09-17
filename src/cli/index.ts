@@ -57,6 +57,8 @@ Examples:
 `);
 }
 
+const BOOLEAN_FLAGS = new Set(["help", "dry-run", "skip-questions"]);
+
 function parseArgs(argv: string[]): ParsedArgs {
   const positional: string[] = [];
   const flags: Record<string, string | boolean> = {};
@@ -70,7 +72,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 
     const key = token.slice(2);
     const next = argv[i + 1];
-    if (!next || next.startsWith("--")) {
+    // Boolean flags never consume the following token: otherwise
+    // `--dry-run ./ticket.md` eats the ticket path as the flag's value
+    // and the CLI prints usage with zero positionals.
+    if (BOOLEAN_FLAGS.has(key) || !next || next.startsWith("--")) {
       flags[key] = true;
       continue;
     }
