@@ -16,7 +16,7 @@
  * - Consistent agent coordination
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -246,16 +246,46 @@ function buildFallbackConfig(repoRoot: string, promptSpecPath: string, packageSc
   };
 }
 
-function findSmithersCliPath(repoRoot: string): string | null {
-  const candidates = [
-    join(repoRoot, "node_modules/smithers-orchestrator/src/cli/index.ts"),
-    resolve(dirname(import.meta.path), "../../node_modules/smithers-orchestrator/src/cli/index.ts"),
-    join(process.env.HOME || "", "smithers/src/cli/index.ts"),
+interface SmithersCliResolution {
+  cliPath: string;
+  packageRoot: string;
+  /** Workflow-launch subcommand: "up" for the modern (>=0.8) CLI, "run" for legacy 0.7.x */
+  subcommand: "up" | "run";
+}
+
+function findSmithersCliPath(repoRoot: string): SmithersCliResolution | null {
+  const packageRoots = [
+    join(repoRoot, "node_modules/smithers-orchestrator"),
+    resolve(dirname(import.meta.path), "../../node_modules/smithers-orchestrator"),
+    join(process.env.HOME || "", "smithers"),
   ];
 
-  for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) {
-      return candidate;
+  for (const packageRoot of packageRoots) {
+    if (!packageRoot) continue;
+    const pkgJsonPath = join(packageRoot, "package.json");
+    // Prefer the package's declared bin entry (modern layout: src/bin/smithers.js).
+    if (existsSync(pkgJsonPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+        const bin = pkg.bin;
+        const binRel = typeof bin === "string" ? bin
+          : bin && typeof bin === "object"
+            ? bin.smithers || (Object.values(bin)[0] as string)
+            : null;
+        if (binRel) {
+          const cliPath = resolve(packageRoot, binRel);
+          if (existsSync(cliPath)) {
+            return { cliPath, packageRoot, subcommand: "up" };
+          }
+        }
+      } catch {
+        // Fall through to the legacy layout check below.
+      }
+    }
+    // Legacy 0.7.x layout fallback.
+    const legacyCli = join(packageRoot, "src/cli/index.ts");
+    if (existsSync(legacyCli)) {
+      return { cliPath: legacyCli, packageRoot, subcommand: "run" };
     }
   }
 
@@ -706,8 +736,8 @@ async function main() {
 
   await ensureJjAvailable(repoRoot);
 
-  const smithersCliPath = findSmithersCliPath(repoRoot);
-  if (!smithersCliPath) {
+  const smithers = findSmithersCliPath(repoRoot);
+  if (!smithers) {
     throw new Error(
       "Could not find smithers CLI. Install smithers-orchestrator in this repo:\n  bun add smithers-orchestrator",
     );
@@ -813,7 +843,7 @@ async function main() {
   if (runningFromSource) {
     execCwd = superRalphSourceRoot;
   } else {
-    const smithersDir = dirname(dirname(smithersCliPath)); // Go up from src/cli to smithers root
+    const smithersDir = smithers.packageRoot;
     execCwd = existsSync(join(smithersDir, "node_modules")) ? smithersDir : repoRoot;
   }
 
@@ -823,8 +853,8 @@ async function main() {
   const args = [
     "-r",
     effectivePreload,
-    smithersCliPath,
-    "run",
+    smithers.cliPath,
+    smithers.subcommand,
     workflowPath,
     "--root",
     repoRoot,
