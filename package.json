@@ -1,5 +1,4 @@
-{
-  "name": "super-ralph",
+{  "name": "super-ralph",
   "version": "0.3.2",
   "description": "Reusable Ralph workflow pattern - ticket-driven development with multi-agent review loops",
   "author": "William Cory",
@@ -25,12 +24,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/evmts/super-ralph.git"
+    "url": "https://github.com/roninjin10/super-ralph.git"
   },
   "bugs": {
-    "url": "https://github.com/evmts/super-ralph/issues"
+    "url": "https://github.com/roninjin10/super-ralph/issues"
   },
-  "homepage": "https://github.com/evmts/super-ralph#readme",
+  "homepage": "https://github.com/roninjin10/super-ralph#readme",
   "keywords": [
     "ai",
     "workflow",
@@ -62,3 +61,4 @@
     "better-sqlite3": "^11.0.0"
   }
 }
+

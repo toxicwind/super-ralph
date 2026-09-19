@@ -75,6 +75,19 @@ import type { CrossRunTicketState } from "./durability";
 import { useSuperRalph } from "./hooks/useSuperRalph";
 import type { SuperRalphContext, UseSuperRalphConfig } from "./hooks/useSuperRalph";
 import { ralphOutputSchemas } from "./schemas";
+import {
+  NimProxyKeyPool,
+  resolveProxyConfig,
+  resolveProxyApiKey,
+  proxyEnvOverrides,
+  proxyChatCompletions,
+  isProxyBypassed,
+  parseRetryAfterMs,
+  NimProxyConfigError,
+  DEFAULT_PROXY_BASE_URL,
+  DEFAULT_PROXY_MODEL,
+} from "./nimProxy";
+import type { ProxyConfig, ProxyKeyStats } from "./nimProxy";
 
 export {
   // Selectors
@@ -129,6 +142,18 @@ export {
   clarifyingQuestionsOutputSchema,
   interpretConfigOutputSchema,
   monitorOutputSchema,
+
+  // nim-proxy
+  NimProxyKeyPool,
+  resolveProxyConfig,
+  resolveProxyApiKey,
+  proxyEnvOverrides,
+  proxyChatCompletions,
+  isProxyBypassed,
+  parseRetryAfterMs,
+  NimProxyConfigError,
+  DEFAULT_PROXY_BASE_URL,
+  DEFAULT_PROXY_MODEL,
 };
 
 export type {
@@ -156,4 +181,6 @@ export type {
   AgentStats,
   AgentRegistrySnapshot,
   CrossRunTicketState,
+  ProxyConfig,
+  ProxyKeyStats,
 };

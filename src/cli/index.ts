@@ -16,11 +16,19 @@
  * - Consistent agent coordination
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { getClarificationQuestions } from "./clarifications.ts";
+import {
+  resolveProxyConfig,
+  proxyEnvOverrides,
+  proxyChatCompletions,
+  isProxyBypassed,
+  type ProxyConfig,
+} from "../nimProxy.ts";
 
 type ParsedArgs = {
   positional: string[];
@@ -49,6 +57,8 @@ Examples:
 `);
 }
 
+const BOOLEAN_FLAGS = new Set(["help", "dry-run", "skip-questions"]);
+
 function parseArgs(argv: string[]): ParsedArgs {
   const positional: string[] = [];
   const flags: Record<string, string | boolean> = {};
@@ -62,7 +72,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 
     const key = token.slice(2);
     const next = argv[i + 1];
-    if (!next || next.startsWith("--")) {
+    // Boolean flags never consume the following token: otherwise
+    // `--dry-run ./ticket.md` eats the ticket path as the flag's value
+    // and the CLI prints usage with zero positionals.
+    if (BOOLEAN_FLAGS.has(key) || !next || next.startsWith("--")) {
       flags[key] = true;
       continue;
     }
@@ -233,16 +246,46 @@ function buildFallbackConfig(repoRoot: string, promptSpecPath: string, packageSc
   };
 }
 
-function findSmithersCliPath(repoRoot: string): string | null {
-  const candidates = [
-    join(repoRoot, "node_modules/smithers-orchestrator/src/cli/index.ts"),
-    resolve(dirname(import.meta.path), "../../node_modules/smithers-orchestrator/src/cli/index.ts"),
-    join(process.env.HOME || "", "smithers/src/cli/index.ts"),
+interface SmithersCliResolution {
+  cliPath: string;
+  packageRoot: string;
+  /** Workflow-launch subcommand: "up" for the modern (>=0.8) CLI, "run" for legacy 0.7.x */
+  subcommand: "up" | "run";
+}
+
+function findSmithersCliPath(repoRoot: string): SmithersCliResolution | null {
+  const packageRoots = [
+    join(repoRoot, "node_modules/smithers-orchestrator"),
+    resolve(dirname(import.meta.path), "../../node_modules/smithers-orchestrator"),
+    join(process.env.HOME || "", "smithers"),
   ];
 
-  for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) {
-      return candidate;
+  for (const packageRoot of packageRoots) {
+    if (!packageRoot) continue;
+    const pkgJsonPath = join(packageRoot, "package.json");
+    // Prefer the package's declared bin entry (modern layout: src/bin/smithers.js).
+    if (existsSync(pkgJsonPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+        const bin = pkg.bin;
+        const binRel = typeof bin === "string" ? bin
+          : bin && typeof bin === "object"
+            ? bin.smithers || (Object.values(bin)[0] as string)
+            : null;
+        if (binRel) {
+          const cliPath = resolve(packageRoot, binRel);
+          if (existsSync(cliPath)) {
+            return { cliPath, packageRoot, subcommand: "up" };
+          }
+        }
+      } catch {
+        // Fall through to the legacy layout check below.
+      }
+    }
+    // Legacy 0.7.x layout fallback.
+    const legacyCli = join(packageRoot, "src/cli/index.ts");
+    if (existsSync(legacyCli)) {
+      return { cliPath: legacyCli, packageRoot, subcommand: "run" };
     }
   }
 
@@ -327,6 +370,13 @@ const { smithers, outputs, Workflow } = createSmithers(
   { dbPath: DB_PATH }
 );
 
+// Proxy routing: the super-ralph CLI injects NIM_BASE_URL (with /v1),
+// NVIDIA_API_KEY, ANTHROPIC_BASE_URL and NIM_MODEL into its own env before
+// spawning this workflow, so every ClaudeCodeAgent child inherits proxy
+// routing automatically. ClaudeCodeAgent blanks ANTHROPIC_API_KEY on spawn
+// but passes NIM_BASE_URL/NVIDIA_API_KEY through untouched, which is what
+// the claude NIM shim reads. Never bake key values into this generated
+// file; keys travel in process env only.
 function createClaude(systemPrompt: string) {
   return new ClaudeCodeAgent({
     model: "claude-sonnet-4-6",
@@ -416,7 +466,15 @@ async function runClarifyingQuestions(
   promptText: string,
   repoRoot: string,
   packageScripts: Record<string, string>,
+  dryRun: boolean = false,
+  proxyConfig: ProxyConfig | null = null,
 ): Promise<any> {
+  // Early return for dry-run: no API call, no spinner
+  if (dryRun) {
+    const questions = getClarificationQuestions();
+    return { questions, answers: null, summary: null, dryRun: true };
+  }
+
   const scriptsBlock = Object.entries(packageScripts)
     .map(([name, cmd]) => `- ${name}: ${cmd}`)
     .join("\n");
@@ -467,57 +525,110 @@ Return ONLY valid JSON (no markdown fences, no commentary):
   }, 80);
 
   let claudeResult: string;
-  try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("no-api-key");
+  const useProxy = !!proxyConfig && !proxyConfig.bypass;
 
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 4096,
-        messages: [{ role: "user", content: questionGenPrompt }],
-      }),
-    });
-
-    clearInterval(spinInterval);
-    process.stdout.write("\r\x1b[K");
-
-    if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
-    const data = await resp.json() as any;
-    claudeResult = data.content?.[0]?.text ?? "";
-    if (!claudeResult.trim()) throw new Error("Empty API response");
-  } catch (apiErr: any) {
-    clearInterval(spinInterval);
-    process.stdout.write("\r\x1b[K");
-
-    // Fallback to claude --print if API call fails (e.g. no API key)
-    console.log("⚠️  API call failed, falling back to claude CLI...\n");
-    const claudeEnv = { ...process.env, ANTHROPIC_API_KEY: "" };
-    delete (claudeEnv as any).CLAUDECODE;
-    const fallbackProc = Bun.spawn([
-      "claude", "--print", "--output-format", "text", "--model", "claude-opus-4-6",
-      questionGenPrompt,
-    ], {
-      cwd: repoRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-      env: claudeEnv,
-    });
-    const fallbackOut = await new Response(fallbackProc.stdout).text();
-    const fallbackErr = await new Response(fallbackProc.stderr).text();
-    const fallbackCode = await fallbackProc.exited;
-    if (fallbackCode !== 0 || !fallbackOut.trim()) {
-      throw new Error(`claude --print failed (code ${fallbackCode}): ${fallbackErr}`);
+  if (useProxy) {
+    // Maximal nim-proxy path: question generation goes through the proxy
+    // with multi-key 429 rotation (see src/nimProxy.ts).
+    try {
+      claudeResult = await proxyChatCompletions({
+        prompt: questionGenPrompt,
+        model: (proxyConfig as ProxyConfig).model,
+        maxTokens: 4096,
+        config: proxyConfig as ProxyConfig,
+      });
+    } finally {
+      clearInterval(spinInterval);
+      process.stdout.write("\r\x1b[K");
     }
-    claudeResult = fallbackOut.trim();
-  }
+    if (!claudeResult.trim()) throw new Error("nim-proxy returned an empty response");
+  } else {
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.NVIDIA_API_KEY;
+    const baseUrl = process.env.ANTHROPIC_BASE_URL;
+    const model = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "claude-opus-4-6";
 
+    if (apiKey && baseUrl) {
+      // Proxy detected — use OpenAI chat completions format
+      try {
+        const url = `${baseUrl.replace(/\/v1$/, "")}/v1/chat/completions`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 4096,
+            messages: [{ role: "user", content: questionGenPrompt }],
+          }),
+        });
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+        const data = await resp.json() as any;
+        claudeResult = data.choices?.[0]?.message?.content ?? "";
+        if (!claudeResult.trim()) throw new Error("Empty API response");
+      } catch (apiErr: any) {
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        throw apiErr;
+      }
+    } else if (apiKey) {
+      // Direct Anthropic API
+      try {
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-6",
+            max_tokens: 4096,
+            messages: [{ role: "user", content: questionGenPrompt }],
+          }),
+        });
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        if (!resp.ok) throw new Error(`API ${resp.status}: ${await resp.text()}`);
+        const data = await resp.json() as any;
+        claudeResult = data.content?.[0]?.text ?? "";
+        if (!claudeResult.trim()) throw new Error("Empty API response");
+      } catch (apiErr: any) {
+        clearInterval(spinInterval);
+        process.stdout.write("\r\x1b[K");
+        throw apiErr;
+      }
+    }
+
+    if (!claudeResult) {
+      // Fallback to claude --print if API call fails (e.g. no API key)
+      console.log("⚠️  API call failed, falling back to claude CLI...\n");
+      const claudeEnv = { ...process.env };
+      delete (claudeEnv as any).CLAUDECODE;
+      const fallbackProc = Bun.spawn([
+        "claude", "--print", "--output-format", "text", "--model", model,
+        questionGenPrompt,
+      ], {
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: claudeEnv,
+      });
+      const fallbackOut = await new Response(fallbackProc.stdout).text();
+      const fallbackErr = await new Response(fallbackProc.stderr).text();
+      const fallbackCode = await fallbackProc.exited;
+      if (fallbackCode !== 0 || !fallbackOut.trim()) {
+        throw new Error(`claude --print failed (code ${fallbackCode}): ${fallbackErr}`);
+      }
+      claudeResult = fallbackOut.trim();
+    }
+
+
+
+  }
   // Parse the JSON response — extract JSON from possible markdown fences
   let questions: any[];
   try {
@@ -588,6 +699,28 @@ async function main() {
     process.exit(parsed.flags.help ? 0 : 1);
   }
 
+  // -- nim-proxy: route every model call through the proxy by default --
+  // The CLI resolves the proxy key once here and injects NIM_BASE_URL /
+  // NVIDIA_API_KEY / ANTHROPIC_BASE_URL into its own env, so every downstream
+  // child process (claude NIM shim, smithers workflow, interactive UI)
+  // inherits proxy routing. Keys stay in env - never written to disk.
+  const isDryRun = parsed.flags["dry-run"] === true;
+  let proxyConfig: ProxyConfig | null = null;
+  if (!isProxyBypassed() && !isDryRun) {
+    // Throws NimProxyConfigError with an actionable message when no key is set.
+    proxyConfig = resolveProxyConfig();
+    const proxyEnv = proxyEnvOverrides(proxyConfig);
+    for (const [name, value] of Object.entries(proxyEnv)) {
+      process.env[name] = value;
+    }
+    console.log(
+      "nim-proxy: routing all model calls through " + proxyConfig.baseUrl +
+      " (" + proxyConfig.apiKeys.length + " key(s), model " + proxyConfig.model + ")"
+    );
+  } else if (isProxyBypassed()) {
+    console.log("nim-proxy: bypassed via NIM_PROXY_BYPASS=1 (direct provider behavior)");
+  }
+
   const repoRoot = resolve(
     typeof parsed.flags.cwd === "string" ? parsed.flags.cwd : process.cwd(),
   );
@@ -603,8 +736,8 @@ async function main() {
 
   await ensureJjAvailable(repoRoot);
 
-  const smithersCliPath = findSmithersCliPath(repoRoot);
-  if (!smithersCliPath) {
+  const smithers = findSmithersCliPath(repoRoot);
+  if (!smithers) {
     throw new Error(
       "Could not find smithers CLI. Install smithers-orchestrator in this repo:\n  bun add smithers-orchestrator",
     );
@@ -630,7 +763,7 @@ async function main() {
   // Step 1: Clarifying questions (unless --skip-questions)
   let clarificationSession: any = null;
   if (!parsed.flags["skip-questions"]) {
-    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts);
+    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"], proxyConfig);
   }
 
   // Generate workflow file
@@ -710,7 +843,7 @@ async function main() {
   if (runningFromSource) {
     execCwd = superRalphSourceRoot;
   } else {
-    const smithersDir = dirname(dirname(smithersCliPath)); // Go up from src/cli to smithers root
+    const smithersDir = smithers.packageRoot;
     execCwd = existsSync(join(smithersDir, "node_modules")) ? smithersDir : repoRoot;
   }
 
@@ -720,8 +853,8 @@ async function main() {
   const args = [
     "-r",
     effectivePreload,
-    smithersCliPath,
-    "run",
+    smithers.cliPath,
+    smithers.subcommand,
     workflowPath,
     "--root",
     repoRoot,
