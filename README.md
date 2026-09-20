@@ -102,7 +102,7 @@ That's it! 30 lines of configuration for a complete workflow.
 ## Model routing via flock
 
 By default every model call goes through the local flock proxy
-(http://127.0.0.1:8000, OpenAI-compatible) instead of direct provider APIs.
+(http://127.0.0.1:25193, OpenAI-compatible) instead of direct provider APIs.
 
 How it works:
 
@@ -123,7 +123,7 @@ Env knobs:
 - FLOCK_API_KEY: proxy client key (required; comma-separated enables rotation).
   NIM_PROXY_API_KEY still accepted as a deprecated alias.
   Falls back to ANTHROPIC_API_KEY / NVIDIA_API_KEY when unset.
-- FLOCK_BASE_URL: proxy origin, default http://127.0.0.1:8000 (NIM_PROXY_BASE_URL still accepted as fallback)
+- FLOCK_BASE_URL: proxy origin, default http://127.0.0.1:25193 (NIM_PROXY_BASE_URL still accepted as fallback)
   (a trailing /v1 is stripped for canonicalization).
 - FLOCK_MODEL: model id sent to the proxy, default openai/gpt-oss-20b (NIM_PROXY_MODEL still accepted as fallback).
 - FLOCK_BYPASS=1 (or NIM_PROXY_BYPASS=1): escape hatch -- restore pre-proxy direct behavior.
