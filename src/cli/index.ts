@@ -433,7 +433,7 @@ export default smithers((ctx) => (
         <SuperRalph
           ctx={ctx}
           outputs={outputs}
-          {...((ctx.outputMaybe("interpret-config", outputs.interpret_config) as any) || FALLBACK_CONFIG)}
+          {...((ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG)}
           agents={{
             planning: planningAgent,
             implementation: implementationAgent,
@@ -446,7 +446,7 @@ export default smithers((ctx) => (
         <Monitor
           dbPath={DB_PATH}
           runId={ctx.runId}
-          config={(ctx.outputMaybe("interpret-config", outputs.interpret_config) as any) || FALLBACK_CONFIG}
+          config={(ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG}
           clarificationSession={CLARIFICATION_SESSION}
           prompt={PROMPT_TEXT}
           repoRoot={REPO_ROOT}
