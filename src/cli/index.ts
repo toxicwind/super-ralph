@@ -707,6 +707,7 @@ async function main() {
   // child process (claude NIM shim, smithers workflow, interactive UI)
   // inherits proxy routing. Keys stay in env - never written to disk.
   const isDryRun = parsed.flags["dry-run"] === true;
+  const headless = process.stdout.isTTY !== true; // headless: stdout reserved for exact final reply; diagnostics -> stderr
   let proxyConfig: ProxyConfig | null = null;
   if (!isProxyBypassed() && !isDryRun) {
     // Throws NimProxyConfigError with an actionable message when no key is set.
@@ -715,12 +716,15 @@ async function main() {
     for (const [name, value] of Object.entries(proxyEnv)) {
       process.env[name] = value;
     }
-    console.log(
+    const proxyMsg =
       "nim-proxy: routing all model calls through " + proxyConfig.baseUrl +
-      " (" + proxyConfig.apiKeys.length + " key(s), model " + proxyConfig.model + ")"
-    );
+      " (" + proxyConfig.apiKeys.length + " key(s), model " + proxyConfig.model +
+      ")";
+    if (headless) console.error(proxyMsg);
+    else console.log(proxyMsg);
   } else if (isProxyBypassed()) {
-    console.log("nim-proxy: bypassed via NIM_PROXY_BYPASS=1 (direct provider behavior)");
+    if (headless) console.error("nim-proxy: bypassed via NIM_PROXY_BYPASS=1 (direct provider behavior)");
+    else console.log("nim-proxy: bypassed via NIM_PROXY_BYPASS=1 (direct provider behavior)");
   }
 
   const repoRoot = resolve(
@@ -735,7 +739,6 @@ async function main() {
   }
 
   // Headless (non-TTY stdout): exact-output mode - no banners, no chatter.
-  const headless = process.stdout.isTTY !== true;
   if (!headless) console.log("🚀 Super Ralph - Smithers Workflow Edition\n");
 
   await ensureJjAvailable(repoRoot);
