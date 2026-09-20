@@ -8,7 +8,6 @@ import { computePipelineStage, isJobComplete, type TicketSchedule, type TicketSt
 import { TicketScheduler } from "./TicketScheduler";
 import { AgenticMergeQueue } from "./AgenticMergeQueue";
 import { Job } from "./Job";
-import { Monitor } from "./Monitor";
 import type { ScheduledJob } from "../scheduledTasks";
 
 // --- Props ---
@@ -193,10 +192,6 @@ export function SuperRalph({
             output={outputs.ticket_schedule} completedTicketIds={completedTicketIds}
           />
         )}
-        <Monitor
-          ctx={ctx} output={outputs.monitor} activeJobs={activeJobs}
-          ticketStates={ticketStates} maxConcurrency={maxConcurrency}
-        />
       </Ralph>
 
       {/* Execution loop - runs scheduled jobs in parallel */}

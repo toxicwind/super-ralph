@@ -433,20 +433,20 @@ export default smithers((ctx) => (
         <SuperRalph
           ctx={ctx}
           outputs={outputs}
-          {...((ctx.outputMaybe("interpret-config", outputs.interpret_config) as any) || FALLBACK_CONFIG)}
+          {...((ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG)}
           agents={{
-            planning: planningAgent,
-            implementation: implementationAgent,
-            testing: testingAgent,
-            reviewing: reviewingAgent,
-            reporting: reportingAgent,
+            planning: { agent: planningAgent, description: "Plan and research next tickets.", isScheduler: true },
+            implementation: { agent: implementationAgent, description: "Implement with test-driven development and jj workflows." },
+            testing: { agent: testingAgent, description: "Run tests and validate behavior changes." },
+            reviewing: { agent: reviewingAgent, description: "Review for regressions, spec drift, and correctness." },
+            reporting: { agent: reportingAgent, description: "Write concise, accurate ticket status reports." },
           }}
         />
 
         <Monitor
           dbPath={DB_PATH}
           runId={ctx.runId}
-          config={(ctx.outputMaybe("interpret-config", outputs.interpret_config) as any) || FALLBACK_CONFIG}
+          config={(ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG}
           clarificationSession={CLARIFICATION_SESSION}
           prompt={PROMPT_TEXT}
           repoRoot={REPO_ROOT}
@@ -864,7 +864,11 @@ async function main() {
     String(maxConcurrencyOverride),
   ];
 
-  const env = { ...process.env, USE_CLI_AGENTS: "1", SMITHERS_DEBUG: "1" };
+  const env = { ...process.env, USE_CLI_AGENTS: "1", SMITHERS_DEBUG: "1",
+    // Force production react-reconciler: the dev build calls the
+    // Chrome-only console.timeStamp() on every re-render and crashes
+    // the run when it is absent (see probe sr-muadc9hi-2adeddd4).
+    NODE_ENV: "production" };
   delete (env as any).CLAUDECODE;
 
   const proc = Bun.spawn(["bun", "--no-install", ...args], {

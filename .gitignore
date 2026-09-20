@@ -14,3 +14,19 @@ github_*_pat.json
 .env*
 *secret*
 *token*
+
+# --- secret hygiene (2026-09-19): never commit credentials ---
+.secrets*
+.env
+*.env
+.env.*
+credentials*
+*api_key*
+*apikey*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.aws/
+.gnupg/
+**/secrets/**
