@@ -42,7 +42,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "cli": "bun run src/cli/index.ts"
+    "cli": "bun run src/cli/index.ts",
+    "test": "bun test tests/"
   },
   "peerDependencies": {
     "smithers-orchestrator": "*"

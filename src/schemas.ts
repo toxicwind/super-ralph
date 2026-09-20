@@ -4,6 +4,7 @@ import { interpretConfigOutputSchema } from "./components/InterpretConfig";
 import { monitorOutputSchema } from "./components/Monitor";
 import { ticketScheduleSchema } from "./components/TicketScheduler";
 import { mergeQueueResultSchema } from "./components/AgenticMergeQueue";
+import { finalReportOutputSchema } from "./components/FinalReport";
 
 /**
  * Standard output schemas for Ralph workflow pattern.
@@ -178,4 +179,6 @@ export const ralphOutputSchemas = {
   ticket_schedule: ticketScheduleSchema,
 
   merge_queue_result: mergeQueueResultSchema,
+
+  final_report: finalReportOutputSchema,
 };

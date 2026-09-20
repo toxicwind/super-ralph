@@ -8,7 +8,7 @@
  * Architecture:
  * 1. ClarifyingQuestions component generates and collects user preferences
  * 2. InterpretConfig component converts preferences into SuperRalph configuration
- * 3. SuperRalph + Monitor run in parallel to execute the workflow with live monitoring
+ * 3. SuperRalph runs the finite work loops (scheduler, execution, merge queue)
  *
  * Everything is orchestrated through Smithers, providing:
  * - Resumability (can restart from any step)
@@ -45,6 +45,7 @@ Usage:
 Options:
   --cwd <path>                    Repo root (default: current directory)
   --max-concurrency <n>           Workflow max concurrency override
+  --max-iterations <n>           Ralph loop iteration ceiling (default: 25)
   --run-id <id>                   Explicit Smithers run id
   --dry-run                       Generate workflow files but do not execute
   --skip-questions                Skip the clarifying questions phase
@@ -327,8 +328,9 @@ function renderWorkflowFile(params: {
   detectedAgents: { claude: boolean; codex: boolean };
   fallbackConfig: any;
   clarificationSession: any | null;
+  maxIterations: number;
 }): string {
-  const { promptText, promptSpecPath, repoRoot, dbPath, packageScripts, detectedAgents, fallbackConfig, clarificationSession } = params;
+  const { promptText, promptSpecPath, repoRoot, dbPath, packageScripts, detectedAgents, fallbackConfig, clarificationSession, maxIterations } = params;
 
   // Determine import strategy:
   // If target repo is super-ralph itself, use relative imports
@@ -350,9 +352,9 @@ function renderWorkflowFile(params: {
   }
 
   return `import React from "react";
-import { createSmithers, ClaudeCodeAgent, CodexAgent, Sequence, Parallel } from "smithers-orchestrator";
+import { createSmithers, ClaudeCodeAgent, CodexAgent, Sequence } from "smithers-orchestrator";
 import { SuperRalph } from "${importPrefix}";
-import { InterpretConfig, Monitor } from "${importPrefix}/components";
+import { InterpretConfig, FinalReport } from "${importPrefix}/components";
 import { ralphOutputSchemas } from "${importPrefix}";
 
 const REPO_ROOT = ${JSON.stringify(repoRoot)};
@@ -364,7 +366,9 @@ const PROMPT_SPEC_PATH = ${JSON.stringify(promptSpecPath)};
 const PACKAGE_SCRIPTS = ${JSON.stringify(packageScripts, null, 2)};
 const FALLBACK_CONFIG = ${JSON.stringify(fallbackConfig, null, 2)};
 const CLARIFICATION_SESSION = ${JSON.stringify(clarificationSession)};
-
+// Finite-by-default: Ralph loops exit on a real done predicate; this ceiling
+// is the backstop (onMaxReached="fail" makes exhaustion loud, exit non-zero).
+const MAX_ITERATIONS = ${maxIterations};
 const { smithers, outputs, Workflow } = createSmithers(
   ralphOutputSchemas,
   { dbPath: DB_PATH }
@@ -409,6 +413,7 @@ const implementationAgent = choose("claude", "Implement with test-driven develop
 const testingAgent = choose("claude", "Run tests and validate behavior changes.");
 const reviewingAgent = choose("codex", "Review for regressions, spec drift, and correctness.");
 const reportingAgent = choose("claude", "Write concise, accurate ticket status reports.");
+const finalAgent = choose("claude", "Write the final reply for a completed autonomous workflow run. Follow the task instructions exactly; when asked for an exact reply, output only that.");
 
 export default smithers((ctx) => (
   <Workflow name="super-ralph-full">
@@ -428,30 +433,27 @@ export default smithers((ctx) => (
         agent={planningAgent}
       />
 
-      {/* Step 2: Run SuperRalph + Monitor in Parallel */}
-      <Parallel>
-        <SuperRalph
-          ctx={ctx}
-          outputs={outputs}
-          {...((ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG)}
-          agents={{
-            planning: { agent: planningAgent, description: "Plan and research next tickets.", isScheduler: true },
-            implementation: { agent: implementationAgent, description: "Implement with test-driven development and jj workflows." },
-            testing: { agent: testingAgent, description: "Run tests and validate behavior changes." },
-            reviewing: { agent: reviewingAgent, description: "Review for regressions, spec drift, and correctness." },
-            reporting: { agent: reportingAgent, description: "Write concise, accurate ticket status reports." },
-          }}
-        />
+      {/* Step 2: Run the finite SuperRalph work loops, then the final report */}
+      <SuperRalph
+        ctx={ctx}
+        outputs={outputs}
+        {...((ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG)}
+        maxIterations={MAX_ITERATIONS}
+        agents={{
+          planning: { agent: planningAgent, description: "Plan and research next tickets.", isScheduler: true },
+          implementation: { agent: implementationAgent, description: "Implement with test-driven development and jj workflows." },
+          testing: { agent: testingAgent, description: "Run tests and validate behavior changes." },
+          reviewing: { agent: reviewingAgent, description: "Review for regressions, spec drift, and correctness." },
+          reporting: { agent: reportingAgent, description: "Write concise, accurate ticket status reports." },
+        }}
+      />
 
-        <Monitor
-          dbPath={DB_PATH}
-          runId={ctx.runId}
-          config={(ctx.latest("interpret_config", "interpret-config") as any) || FALLBACK_CONFIG}
-          clarificationSession={CLARIFICATION_SESSION}
-          prompt={PROMPT_TEXT}
-          repoRoot={REPO_ROOT}
-        />
-      </Parallel>
+      {/* Step 3: Final report - terminal step, produces the reply the CLI prints */}
+      <FinalReport
+        prompt={PROMPT_TEXT}
+        agent={finalAgent}
+        output={outputs.final_report}
+      />
     </Sequence>
   </Workflow>
 ));
@@ -732,7 +734,9 @@ async function main() {
     throw new Error("Prompt input is empty.");
   }
 
-  console.log("🚀 Super Ralph - Smithers Workflow Edition\n");
+  // Headless (non-TTY stdout): exact-output mode - no banners, no chatter.
+  const headless = process.stdout.isTTY !== true;
+  if (!headless) console.log("🚀 Super Ralph - Smithers Workflow Edition\n");
 
   await ensureJjAvailable(repoRoot);
 
@@ -760,11 +764,23 @@ async function main() {
   // Write prompt to file
   await writeFile(promptSpecPath, `${promptText.trim()}\n`, "utf8");
 
-  // Step 1: Clarifying questions (unless --skip-questions)
+  // Step 1: Clarifying questions (unless --skip-questions).
+  // Non-interactive stdin can't answer questions: auto-skip instead of hanging.
   let clarificationSession: any = null;
-  if (!parsed.flags["skip-questions"]) {
+  const questionsExplicitlySkipped = parsed.flags["skip-questions"] === true;
+  const interactiveStdin = process.stdin.isTTY === true;
+  if (!questionsExplicitlySkipped && !interactiveStdin && !headless) {
+    console.log("📋 Non-interactive stdin detected — skipping clarifying questions.\n");
+  }
+  if (!questionsExplicitlySkipped && interactiveStdin) {
     clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"], proxyConfig);
   }
+
+  // Finite-by-default: Ralph loop iteration ceiling (backstop; the real exit
+  // is the done predicate in SuperRalph).
+  const maxIterations = typeof parsed.flags["max-iterations"] === "string"
+    ? Math.max(1, Number(parsed.flags["max-iterations"]) || 25)
+    : 25;
 
   // Generate workflow file
   const workflowPath = join(generatedDir, "workflow.tsx");
@@ -781,6 +797,7 @@ async function main() {
     detectedAgents: { claude: detectedAgents.claude, codex: detectedAgents.codex },
     fallbackConfig,
     clarificationSession,
+    maxIterations,
   });
 
   await writeFile(workflowPath, workflowSource, "utf8");
@@ -820,20 +837,23 @@ async function main() {
     ? Math.max(1, Number(parsed.flags["max-concurrency"]) || fallbackConfig.maxConcurrency)
     : fallbackConfig.maxConcurrency;
 
-  console.log(`📁 Repo: ${repoRoot}`);
-  console.log(`📝 Prompt: ${promptSourcePath || "inline"}`);
-  console.log(`🔧 Workflow: ${workflowPath}`);
-  console.log(`💾 Database: ${dbPath}`);
-  console.log(`🆔 Run ID: ${runId}`);
-  console.log(`🤖 Agents: claude=${detectedAgents.claude} codex=${detectedAgents.codex} gh=${detectedAgents.gh}`);
-  console.log(`⚡ Concurrency: ${maxConcurrencyOverride}\n`);
+  if (!headless) {
+      console.log(`📁 Repo: ${repoRoot}`);
+      console.log(`📝 Prompt: ${promptSourcePath || "inline"}`);
+      console.log(`🔧 Workflow: ${workflowPath}`);
+      console.log(`💾 Database: ${dbPath}`);
+      console.log(`🆔 Run ID: ${runId}`);
+      console.log(`🤖 Agents: claude=${detectedAgents.claude} codex=${detectedAgents.codex} gh=${detectedAgents.gh}`);
+      console.log(`⚡ Concurrency: ${maxConcurrencyOverride}`);
+      console.log(`🔁 Max iterations: ${maxIterations}\n`);
+  }
 
   if (parsed.flags["dry-run"]) {
-    console.log("✅ Dry run complete. Workflow files generated but not executed.\n");
+    if (!headless) console.log("✅ Dry run complete. Workflow files generated but not executed.\n");
     return;
   }
 
-  console.log("🎬 Starting workflow execution...\n");
+  if (!headless) console.log("🎬 Starting workflow execution...\n");
 
   // Execute the workflow using Smithers CLI
   // Determine execution directory:
@@ -874,18 +894,60 @@ async function main() {
   const proc = Bun.spawn(["bun", "--no-install", ...args], {
     cwd: execCwd,
     env: env as any,
-    stdout: "inherit",
+    stdout: headless ? "ignore" : "inherit",
     stderr: "inherit",
-    stdin: "inherit",
+    stdin: headless ? "ignore" : "inherit",
   });
 
   const exitCode = await proc.exited;
 
   if (exitCode === 0) {
-    console.log("\n✅ Super Ralph workflow completed successfully!\n");
+    if (!headless) console.log("\n✅ Super Ralph workflow completed successfully!\n");
+    await printFinalReply(dbPath, runId, headless);
   } else {
     console.error(`\n❌ Workflow exited with code ${exitCode}\n`);
     process.exit(exitCode);
+  }
+}
+
+/**
+ * Print the run's final reply (from the terminal FinalReport step).
+ * Headless: the reply IS the entire stdout, byte for byte - nothing else may
+ * be printed (exact-reply prompts like "reply with exactly the word ALIVE"
+ * must yield exactly that text). Interactive: printed as the last line.
+ * A missing final report in headless mode is a contract failure: stderr + exit 1.
+ */
+async function printFinalReply(dbPath: string, runId: string, headless: boolean) {
+  try {
+    const { Database } = await import("bun:sqlite");
+    const db = new Database(dbPath, { readonly: true });
+    let row: any = null;
+    try {
+      row = db.query(
+        `SELECT reply FROM final_report WHERE run_id = ? ORDER BY iteration DESC LIMIT 1`
+      ).get(runId) as any;
+    } catch {
+      // final_report table absent (older workflow) - fall through to fallback.
+    }
+    db.close();
+    if (row?.reply) {
+      if (headless) {
+        process.stdout.write(String(row.reply));
+      } else {
+        console.log(String(row.reply));
+      }
+    } else if (headless) {
+      console.error("(final report unavailable)");
+      process.exit(1);
+    } else {
+      console.log("(final report unavailable)");
+    }
+  } catch (e: any) {
+    if (headless) {
+      console.error(`(could not read final report: ${e?.message ?? e})`);
+      process.exit(1);
+    }
+    console.log(`(could not read final report: ${e?.message ?? e})`);
   }
 }
 

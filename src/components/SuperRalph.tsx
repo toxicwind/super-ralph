@@ -28,6 +28,12 @@ export type SuperRalphProps = {
 
   maxConcurrency: number;
   taskRetries?: number;
+  /**
+   * Finite-by-default: hard ceiling on Ralph loop iterations. When a loop
+   * reaches it without its `until` predicate going true, the run fails
+   * (onMaxReached="fail") so exhaustion is loud, never silent spinning.
+   */
+  maxIterations?: number;
 
   agents: Record<string, {
     agent: any;
@@ -94,6 +100,7 @@ export function SuperRalph({
   ctx, focuses, outputs,
   projectId, projectName, specsPath, referenceFiles, buildCmds, testCmds,
   codeStyle, reviewChecklist, maxConcurrency, taskRetries = 3,
+  maxIterations = 25,
   agents: agentPool,
   progressFile = "PROGRESS.md",
   findingsFile = "docs/test-suite-findings.md",
@@ -170,6 +177,22 @@ export function SuperRalph({
     .filter(job => !isJobComplete(ctx, job));
   const activeCount = activeJobs.length;
 
+  // --- Finite-by-default: one shared quiescence predicate for all loops ---
+  // The engine re-renders this component as outputs land and re-reads `until`
+  // every loop iteration, so this boolean is a live exit condition, not a
+  // one-shot. Classic Ralph is loop-until-done; `until={false}` was never the
+  // pattern, it was a broken Ralph.
+  //
+  // A single shared predicate (rather than per-loop done flags) avoids
+  // circular exit dependencies: no loop waits on another loop's done state,
+  // all three observe the same work state and exit together.
+  const schedulerRan = allSchedules.length > 0;
+  const allWorkComplete =
+    schedulerRan &&
+    !hasTicketsReadyToAdvance(ticketStates) &&
+    activeJobs.length === 0 &&
+    mergeQueueTickets.length === 0;
+
   // Shared props for <Job /> components
   const jobProps = {
     ctx, outputs, retries: taskRetries,
@@ -182,8 +205,8 @@ export function SuperRalph({
 
   return (
     <>
-      {/* Scheduler loop - runs continuously, schedules jobs whenever there's capacity */}
-      <Ralph until={false} maxIterations={Infinity} onMaxReached="return-last">
+      {/* Scheduler loop - schedules jobs whenever there's capacity, exits when all work is complete */}
+      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
         {activeCount < maxConcurrency && (
           <TicketScheduler
             ctx={ctx} ticketStates={ticketStates} activeJobs={activeJobs}
@@ -194,8 +217,8 @@ export function SuperRalph({
         )}
       </Ralph>
 
-      {/* Execution loop - runs scheduled jobs in parallel */}
-      <Ralph until={false} maxIterations={Infinity} onMaxReached="return-last">
+      {/* Execution loop - runs scheduled jobs in parallel, exits when all work is complete */}
+      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
         <Parallel maxConcurrency={maxConcurrency}>
           {activeJobs.map(job => (
             <Job key={job.jobId} job={job} agent={resolveAgent(agentPool, job.agentId)} {...jobProps} />
@@ -203,8 +226,8 @@ export function SuperRalph({
         </Parallel>
       </Ralph>
 
-      {/* Merge queue loop - runs independently */}
-      <Ralph until={false} maxIterations={Infinity} onMaxReached="return-last">
+      {/* Merge queue loop - lands completed work, exits when all work is complete */}
+      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
         <AgenticMergeQueue
           ctx={ctx} outputs={outputs} tickets={mergeQueueTickets}
           agent={resolveAgent(agentPool, mergeQueueAgentId)}

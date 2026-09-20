@@ -137,10 +137,11 @@ Tickets are the **work unit**; **jobs are the scheduling unit**. An AI
 scheduler (`TicketScheduler`, driven by the scheduler agent in your agent
 pool) watches the ticket pipeline and writes jobs into a `scheduled_tasks`
 table in the Smithers SQLite DB (`src/scheduledTasks.ts`, via `bun:sqlite`).
-Three loops then run continuously and in parallel:
+Super Ralph is **finite by default**: it runs until all scheduled work completes, then terminates.
+Three loops run in parallel while there is outstanding work:
 
 ```
-Ralph (infinite loop)
+Ralph (finite loop -- exits when all work is complete)
   ├─ Scheduler loop ── AI scheduler → scheduled_tasks (SQLite)
   │     ├─ UpdateProgress → PROGRESS.md
   │     ├─ CodebaseReview → per-focus reviews → tickets
@@ -169,12 +170,40 @@ scheduled work is lost between scheduler iterations.
 ### Live monitor
 
 `Monitor` (`src/components/Monitor.tsx`) is an OpenTUI terminal dashboard
-that runs alongside the workflow: a real-time task list with status
-indicators, arrow-key navigation into task details, and overall progress —
-all polled live from the Smithers SQLite DB. It starts automatically with the
-CLI-generated workflow.
+for watching a run: a real-time task list with status indicators, arrow-key
+navigation into task details, and overall progress -- all polled live from the
+Smithers SQLite DB. It is deliberately NOT part of the CLI-generated finite
+workflow: an interactive dashboard that runs until a keypress would make the
+run infinite. Supervise it separately (e.g. an event-driven supervisor that
+spawns finite runs and attaches the dashboard while they execute).
+
+### Finite by default
+
+Every <Ralph> loop carries a live exit condition (until) derived from the
+workflow's own outputs via ctx.latest(...): scheduler outputs exist, no
+ticket can advance, no job is active, and the merge queue is empty. When the
+condition holds, the loop exits and the run finishes. No daemon mode exists --
+long-running supervision belongs in a separate event-driven supervisor that
+spawns finite runs.
+
+Iteration budget. Each loop is bounded by maxIterations (default 25, CLI:
+--max-iterations <n>). Exhausting the budget is a failure
+(onMaxReached="fail"), so a stuck run can never spin forever.
+
+Exact stdout in headless runs. When the CLI's stdout is not a TTY (piped, CI,
+or automation), the run is headless: banners are suppressed, the interactive
+monitor is skipped, and clarifying questions are auto-skipped. After the
+workflow finishes, a terminal FinalReport step writes the reply to a
+final_report SQLite table and the CLI prints exactly that reply -- nothing
+else -- with exit code 0. Example:
+
+    super-ralph "reply with exactly the word ALIVE" > out.txt
+    # out.txt contains exactly: ALIVE
+
+If the workflow fails, diagnostics go to stderr and the exit code is non-zero.
 
 ### Real speculative merge queue
+
 
 Each ticket gets its own jj bookmark (`ticket/<id>`) in a dedicated worktree. Development happens in parallel across tickets, and landing uses a **stateful speculative queue**:
 

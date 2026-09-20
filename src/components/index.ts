@@ -21,3 +21,6 @@ export type { TicketResumeProps } from "./TicketResume";
 
 export { AgenticMergeQueue, mergeQueueResultSchema } from "./AgenticMergeQueue";
 export type { AgenticMergeQueueProps, AgenticMergeQueueTicket, MergeQueueResult } from "./AgenticMergeQueue";
+
+export { FinalReport, finalReportOutputSchema } from "./FinalReport";
+export type { FinalReportOutput, FinalReportProps } from "./FinalReport";
