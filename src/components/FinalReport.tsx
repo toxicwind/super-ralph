@@ -30,11 +30,16 @@ export function FinalReport({ prompt, agent, output }: FinalReportProps) {
     "Original user prompt:",
     prompt,
     "",
+    "You MUST output a JSON object with exactly this shape:",
+    '{"reply": "the reply text here"}',
+    "",
     "Rules:",
-    "- If the original prompt is a simple direct instruction (for example: 'reply with exactly the word ALIVE'), follow it EXACTLY. Output only what was asked - no preamble, no commentary, no markdown fences, no explanation.",
-    "- CRITICAL: Output the raw reply text with NO surrounding quotation marks. If asked for ALIVE, output ALIVE (5 bytes), NOT \"ALIVE\" (7 bytes). The quotes are not part of the reply.",
-    "- Otherwise, write a concise completion summary: what was requested, what was accomplished, key outcomes, and anything left unfinished.",
-    "- Output ONLY the reply text itself.",
+    "- If the original prompt is a simple direct instruction (for example: 'reply with exactly the word ALIVE'), the reply field must contain EXACTLY what was asked, byte for byte.",
+    '- Example: for \'reply with exactly the word ALIVE\', output {"reply": "ALIVE"}. The value is ALIVE (5 characters).',
+    "- Do NOT put quotation marks inside the reply value. The JSON syntax already quotes the value; do not double-quote it.",
+    "- Do NOT add preamble, commentary, markdown fences, or explanation outside the JSON.",
+    "- Otherwise, write a concise completion summary in the reply field: what was requested, what was accomplished, key outcomes, and anything left unfinished.",
+    "- Output ONLY the JSON object, nothing else.",
   ].join("\n");
 
   return (

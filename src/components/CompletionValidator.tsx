@@ -44,6 +44,25 @@ export function CompletionValidator({
   output,
   ctx,
 }: CompletionValidatorProps) {
+  // Deterministic pre-check for exact-reply prompts.
+  // LLM agents hallucinate favorable verdicts; byte comparison does not lie.
+  // If the prompt demands an exact word and the reply does not match byte-for-byte,
+  // throw immediately: the Ralph wrapper (onMaxReached="fail") turns this into
+  // a loud workflow failure (non-zero exit, failed DB row).
+  const exactRe = /reply with exactly the word ([A-Za-z0-9]+)/i;
+  const m = prompt.match(exactRe);
+  if (m) {
+    const expected = m[1];
+    const fr = ctx.latest("final_report", "final-report") as { reply?: string } | null;
+    const actual = typeof fr?.reply === "string" ? fr.reply : "";
+    if (actual !== expected) {
+      throw new Error(
+        "CompletionValidator FAILED: exact-reply mismatch. " +
+        `Expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
+        `got ${actual.length} bytes ${JSON.stringify(actual)}.`
+      );
+    }
+  }
   const finalReport = ctx.latest("final_report", "final-report") as {
     reply?: string;
   } | null;
