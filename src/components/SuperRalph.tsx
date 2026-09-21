@@ -204,38 +204,39 @@ export function SuperRalph({
   };
 
   return (
-    <>
-      {/* Scheduler loop - schedules jobs whenever there's capacity, exits when all work is complete */}
-      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
-        {activeCount < maxConcurrency && (
-          <TicketScheduler
-            ctx={ctx} ticketStates={ticketStates} activeJobs={activeJobs}
-            agentPoolContext={agentPoolContext} focuses={focuses}
-            maxConcurrency={maxConcurrency} agent={schedulerAgent}
-            output={outputs.ticket_schedule} completedTicketIds={completedTicketIds}
-          />
-        )}
-      </Ralph>
-
-      {/* Execution loop - runs scheduled jobs in parallel, exits when all work is complete */}
-      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
-        <Parallel maxConcurrency={maxConcurrency}>
-          {activeJobs.map(job => (
-            <Job key={job.jobId} job={job} agent={resolveAgent(agentPool, job.agentId)} {...jobProps} />
-          ))}
-        </Parallel>
-      </Ralph>
-
-      {/* Merge queue loop - lands completed work, exits when all work is complete */}
-      <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
-        <AgenticMergeQueue
-          ctx={ctx} outputs={outputs} tickets={mergeQueueTickets}
-          agent={resolveAgent(agentPool, mergeQueueAgentId)}
-          postLandChecks={ciCommands} preLandChecks={preLandChecks}
-          repoRoot={process.cwd()} mainBranch={mainBranch}
-          maxSpeculativeDepth={maxSpeculativeDepth} output={outputs.land}
+    // 2026-09-21 (ralph-pathfinder): SINGLE outer Ralph loop containing all
+    // three phases. The old three-sibling-loops structure never converged:
+    // the scheduler loop ran to maxIterations before the execution loop ever
+    // got a turn, so scheduled jobs never ran and allWorkComplete stayed
+    // false -> RALPH_MAX_REACHED on every non-simple task. With one loop,
+    // each iteration schedules, executes, and merges, so the shared
+    // allWorkComplete predicate can actually become true.
+    <Ralph until={allWorkComplete} maxIterations={maxIterations} onMaxReached="fail">
+      {/* Phase 1: Scheduler - schedules jobs whenever there's capacity */}
+      {activeCount < maxConcurrency && (
+        <TicketScheduler
+          ctx={ctx} ticketStates={ticketStates} activeJobs={activeJobs}
+          agentPoolContext={agentPoolContext} focuses={focuses}
+          maxConcurrency={maxConcurrency} agent={schedulerAgent}
+          output={outputs.ticket_schedule} completedTicketIds={completedTicketIds}
         />
-      </Ralph>
-    </>
+      )}
+
+      {/* Phase 2: Execution - runs scheduled jobs in parallel */}
+      <Parallel maxConcurrency={maxConcurrency}>
+        {activeJobs.map(job => (
+          <Job key={job.jobId} job={job} agent={resolveAgent(agentPool, job.agentId)} {...jobProps} />
+        ))}
+      </Parallel>
+
+      {/* Phase 3: Merge queue - lands completed work */}
+      <AgenticMergeQueue
+        ctx={ctx} outputs={outputs} tickets={mergeQueueTickets}
+        agent={resolveAgent(agentPool, mergeQueueAgentId)}
+        postLandChecks={ciCommands} preLandChecks={preLandChecks}
+        repoRoot={process.cwd()} mainBranch={mainBranch}
+        maxSpeculativeDepth={maxSpeculativeDepth} output={outputs.land}
+      />
+    </Ralph>
   );
 }
