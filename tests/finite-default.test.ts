@@ -84,6 +84,36 @@ describe("finite-by-default", () => {
   });
 });
 
+describe("completion validator", () => {
+  test("generated workflow validates completion after the final report", async () => {
+    const wf = await dryRun();
+    expect(wf).toContain("CompletionValidator");
+    expect(wf).toContain("completion_validator");
+    // validator runs in a finite Ralph: live until, single iteration, loud fail
+    expect(wf).toContain("completion-validator");
+    expect(wf).toContain("maxIterations={1}");
+    expect(wf).toContain("onMaxReached=\"fail\"");
+  });
+
+  test("validator schema accepts a strict verdict", async () => {
+    const { completionValidatorOutputSchema } = await import("../src/components/CompletionValidator");
+    const ok = completionValidatorOutputSchema.safeParse({
+      valid: true, unmetCriteria: [], summary: "All criteria met.",
+    });
+    expect(ok.success).toBe(true);
+    const bad = completionValidatorOutputSchema.safeParse({
+      valid: false, unmetCriteria: ["reply was not exactly ALIVE"], summary: "Mismatch.",
+    });
+    expect(bad.success).toBe(true);
+    expect(completionValidatorOutputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test("completion_validator output schema is registered", async () => {
+    const { ralphOutputSchemas } = await import("../src/schemas");
+    expect(Object.keys(ralphOutputSchemas)).toContain("completion_validator");
+  });
+});
+
 describe("final report schema", () => {
   test("validates an exact reply", async () => {
     const { finalReportOutputSchema } = await import("../src/components/FinalReport");

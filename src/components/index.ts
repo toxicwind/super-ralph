@@ -23,4 +23,7 @@ export { AgenticMergeQueue, mergeQueueResultSchema } from "./AgenticMergeQueue";
 export type { AgenticMergeQueueProps, AgenticMergeQueueTicket, MergeQueueResult } from "./AgenticMergeQueue";
 
 export { FinalReport, finalReportOutputSchema } from "./FinalReport";
+
+export { CompletionValidator, completionValidatorOutputSchema } from "./CompletionValidator";
+export type { CompletionValidatorOutput, CompletionValidatorProps } from "./CompletionValidator";
 export type { FinalReportOutput, FinalReportProps } from "./FinalReport";

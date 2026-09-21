@@ -352,9 +352,9 @@ function renderWorkflowFile(params: {
   }
 
   return `import React from "react";
-import { createSmithers, ClaudeCodeAgent, CodexAgent, Sequence } from "smithers-orchestrator";
+import { createSmithers, ClaudeCodeAgent, CodexAgent, Sequence, Ralph } from "smithers-orchestrator";
 import { SuperRalph } from "${importPrefix}";
-import { InterpretConfig, FinalReport } from "${importPrefix}/components";
+import { InterpretConfig, FinalReport, CompletionValidator } from "${importPrefix}/components";
 import { ralphOutputSchemas } from "${importPrefix}";
 
 const REPO_ROOT = ${JSON.stringify(repoRoot)};
@@ -414,6 +414,7 @@ const testingAgent = choose("claude", "Run tests and validate behavior changes."
 const reviewingAgent = choose("codex", "Review for regressions, spec drift, and correctness.");
 const reportingAgent = choose("claude", "Write concise, accurate ticket status reports.");
 const finalAgent = choose("claude", "Write the final reply for a completed autonomous workflow run. Follow the task instructions exactly; when asked for an exact reply, output only that.");
+const validatorAgent = choose("claude", "Validate that a completed autonomous workflow run actually satisfied the original goal. Be strict, literal, and evidence-driven.");
 
 export default smithers((ctx) => (
   <Workflow name="super-ralph-full">
@@ -448,12 +449,28 @@ export default smithers((ctx) => (
         }}
       />
 
-      {/* Step 3: Final report - terminal step, produces the reply the CLI prints */}
+      {/* Step 3: Final report - produces the reply the CLI prints */}
       <FinalReport
         prompt={PROMPT_TEXT}
         agent={finalAgent}
         output={outputs.final_report}
       />
+
+      {/* Step 4: Completion validation - quiescence is not completion.
+          A run that stops without satisfying the original goal must never
+          exit 0. valid=false fails loudly: non-zero exit, failed workflow row. */}
+      <Ralph
+        until={(ctx.latest("completion_validator", "completion-validator") as any)?.valid === true}
+        maxIterations={1}
+        onMaxReached="fail"
+      >
+        <CompletionValidator
+          prompt={PROMPT_TEXT}
+          agent={validatorAgent}
+          ctx={ctx}
+          output={outputs.completion_validator}
+        />
+      </Ralph>
     </Sequence>
   </Workflow>
 ));
