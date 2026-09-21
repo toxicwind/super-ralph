@@ -54,13 +54,17 @@ export function CompletionValidator({
   if (m) {
     const expected = m[1];
     const fr = ctx.latest("final_report", "final-report") as { reply?: string } | null;
-    const actual = typeof fr?.reply === "string" ? fr.reply : "";
-    if (actual !== expected) {
-      throw new Error(
-        "CompletionValidator FAILED: exact-reply mismatch. " +
-        `Expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
-        `got ${actual.length} bytes ${JSON.stringify(actual)}.`
-      );
+    // At first render the final report does not exist yet; the check runs
+    // once the report output has landed (the Ralph re-renders on new outputs).
+    if (fr && typeof fr.reply === "string") {
+      const actual = fr.reply;
+      if (actual !== expected) {
+        throw new Error(
+          "CompletionValidator FAILED: exact-reply mismatch. " +
+          `Expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
+          `got ${actual.length} bytes ${JSON.stringify(actual)}.`
+        );
+      }
     }
   }
   const finalReport = ctx.latest("final_report", "final-report") as {
