@@ -925,7 +925,7 @@ async function main() {
 
   if (exitCode === 0) {
     if (!headless) console.log("\n✅ Super Ralph workflow completed successfully!\n");
-    await printFinalReply(dbPath, runId, headless);
+    await printFinalReply(dbPath, runId, headless, promptText);
   } else {
     console.error(`\n❌ Workflow exited with code ${exitCode}\n`);
     process.exit(exitCode);
@@ -939,7 +939,7 @@ async function main() {
  * must yield exactly that text). Interactive: printed as the last line.
  * A missing final report in headless mode is a contract failure: stderr + exit 1.
  */
-async function printFinalReply(dbPath: string, runId: string, headless: boolean) {
+async function printFinalReply(dbPath: string, runId: string, headless: boolean, promptText: string) {
   try {
     const { Database } = await import("bun:sqlite");
     const db = new Database(dbPath, { readonly: true });
@@ -953,8 +953,22 @@ async function printFinalReply(dbPath: string, runId: string, headless: boolean)
     }
     db.close();
     if (row?.reply) {
+      const reply = String(row.reply);
+      // Deterministic exact-reply verification: byte-for-byte, no LLM.
+      const exactRe = /reply with exactly the word ([A-Za-z0-9]+)/i;
+      const m = promptText.match(exactRe);
+      if (m) {
+        const expected = m[1];
+        if (reply !== expected) {
+          console.error(
+            `\n❌ Exact-reply mismatch: expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
+            `got ${reply.length} bytes ${JSON.stringify(reply)}.\n`
+          );
+          process.exit(1);
+        }
+      }
       if (headless) {
-        process.stdout.write(String(row.reply));
+        process.stdout.write(reply);
       } else {
         console.log(String(row.reply));
       }
