@@ -1,0 +1,1 @@
+Reply with exactly the five-letter word ALIVE and nothing else.
