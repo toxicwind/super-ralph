@@ -434,7 +434,8 @@ export default smithers((ctx) => (
         agent={planningAgent}
       />
 
-      {/* Step 2: Run the finite SuperRalph work loops, then the final report */}
+      {/* Step 2: Run the finite SuperRalph work loops (skipped for simple replies) */}
+      {(ctx.latest("interpret_config", "interpret-config") as any)?.isSimpleReply !== true && (
       <SuperRalph
         ctx={ctx}
         outputs={outputs}
@@ -448,6 +449,7 @@ export default smithers((ctx) => (
           reporting: { agent: reportingAgent, description: "Write concise, accurate ticket status reports." },
         }}
       />
+      )}
 
       {/* Step 3: Final report - produces the reply the CLI prints */}
       <FinalReport

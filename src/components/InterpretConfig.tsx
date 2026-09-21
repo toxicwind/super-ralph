@@ -9,6 +9,7 @@ const focusSchema = z.object({
 });
 
 export const interpretConfigOutputSchema = z.object({
+  isSimpleReply: z.boolean().default(false),
   projectName: z.string().min(1),
   projectId: z.string().min(1),
   focuses: z.array(focusSchema).min(1).max(12),
@@ -89,6 +90,7 @@ export function InterpretConfig({
     "Output JSON shape:",
     JSON.stringify(
       {
+        isSimpleReply: false,
         projectName: "string",
         projectId: "string-kebab-case",
         focuses: [{ id: "string", name: "string" }],
@@ -108,6 +110,7 @@ export function InterpretConfig({
     ),
     "",
     "Hard requirements:",
+    "- isSimpleReply: set true ONLY if the user request is a simple direct reply instruction requiring no repo work, no tickets, no code changes (example: reply with exactly the word ALIVE). When true, the workflow skips all work loops and goes straight to the final report.",
     "- Commands must be realistic for the repo.",
     "- Keep focuses concise (2-6).",
     "- Prefer paths relative to repo root.",
