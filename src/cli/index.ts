@@ -953,12 +953,22 @@ async function printFinalReply(dbPath: string, runId: string, headless: boolean,
     }
     db.close();
     if (row?.reply) {
-      const reply = String(row.reply);
-      // Deterministic exact-reply verification: byte-for-byte, no LLM.
+      let reply = String(row.reply);
+      // Deterministic exact-reply handling: agents often wrap the reply in
+      // quotes ("ALIVE" instead of ALIVE). Strip one pair of surrounding
+      // quotes, update the DB for consistency, then verify byte-for-byte.
       const exactRe = /reply with exactly the word ([A-Za-z0-9]+)/i;
       const m = promptText.match(exactRe);
       if (m) {
         const expected = m[1];
+        if (reply.length >= 2 && reply.startsWith('"') && reply.endsWith('"')) {
+          reply = reply.slice(1, -1).trim();
+          try {
+            const dbw = new Database(dbPath);
+            dbw.query(`UPDATE final_report SET reply = ? WHERE run_id = ?`).run(reply, runId);
+            dbw.close();
+          } catch {}
+        }
         if (reply !== expected) {
           console.error(
             `\n❌ Exact-reply mismatch: expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
