@@ -51,6 +51,7 @@ export function CompletionValidator({
     typeof finalReport?.reply === "string" && finalReport.reply.length > 0
       ? finalReport.reply
       : "(no final report was produced)";
+  const replyBytes = Buffer.byteLength(reply, "utf8");
   const progressSummary = selectProgressSummary(ctx);
 
   const validatorPrompt = [
@@ -60,15 +61,19 @@ export function CompletionValidator({
     "Original user prompt:",
     prompt,
     "",
-    "Final reply produced by the workflow:",
+    "Final reply produced by the workflow (EXACT bytes, between the markers):",
+    ">>>",
     reply,
+    "<<<",
+    `Byte length of the reply: ${replyBytes}`,
+    "WARNING: Quotation marks (\") in the reply are LITERAL bytes, not formatting. If the reply shows \"ALIVE\" between the markers, it is 7 bytes, not 5.",
     "",
     "Progress summary:",
     progressSummary ?? "(none recorded)",
     "",
     "Rules:",
     "- Extract the concrete, checkable completion criteria from the original prompt.",
-    "- For a simple direct instruction (for example: 'reply with exactly the word ALIVE'), the criterion is literal: the final reply must satisfy it EXACTLY, byte for byte. 'ALIVE' is not 'Alive', not 'ALIVE!', not a sentence containing ALIVE.",
+    "- For a simple direct instruction (for example: 'reply with exactly the word ALIVE'), the criterion is literal: the final reply must satisfy it EXACTLY, byte for byte. Compare the byte length first. 'ALIVE' (5 bytes) is not '\"ALIVE\"' (7 bytes), not 'Alive', not 'ALIVE!', not a sentence containing ALIVE.",
     "- Check EVERY criterion against the final reply and the progress summary. Be strict: a criterion counts as met only if the evidence shows it DONE, not merely attempted.",
     "- Set valid=true only if ALL criteria are met. Otherwise valid=false and list each unmet criterion concretely in unmetCriteria.",
     "- summary: one paragraph stating what was verified and what (if anything) is missing.",

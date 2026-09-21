@@ -32,6 +32,7 @@ export function FinalReport({ prompt, agent, output }: FinalReportProps) {
     "",
     "Rules:",
     "- If the original prompt is a simple direct instruction (for example: 'reply with exactly the word ALIVE'), follow it EXACTLY. Output only what was asked - no preamble, no commentary, no markdown fences, no explanation.",
+    "- CRITICAL: Output the raw reply text with NO surrounding quotation marks. If asked for ALIVE, output ALIVE (5 bytes), NOT \"ALIVE\" (7 bytes). The quotes are not part of the reply.",
     "- Otherwise, write a concise completion summary: what was requested, what was accomplished, key outcomes, and anything left unfinished.",
     "- Output ONLY the reply text itself.",
   ].join("\n");
