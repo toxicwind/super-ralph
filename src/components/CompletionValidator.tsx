@@ -3,6 +3,7 @@ import { Task } from "smithers-orchestrator";
 import type { SmithersCtx } from "smithers-orchestrator";
 import { z } from "zod";
 import { selectProgressSummary } from "../selectors";
+import { detectExactReply, normalizeReply } from "../exactReply";
 
 export const completionValidatorOutputSchema = z.object({
   valid: z.boolean(),
@@ -49,20 +50,21 @@ export function CompletionValidator({
   // If the prompt demands an exact word and the reply does not match byte-for-byte,
   // throw immediately: the Ralph wrapper (onMaxReached="fail") turns this into
   // a loud workflow failure (non-zero exit, failed DB row).
-  const exactRe = /reply with exactly the word ([A-Za-z0-9]+)/i;
-  const m = prompt.match(exactRe);
-  if (m) {
-    const expected = m[1];
+  // The comparison uses the NORMALIZED reply (quote-stripped, what the user
+  // actually sees): the zod transform does not propagate to the persisted DB
+  // row, so the raw stored value may still carry the agent's surrounding quotes.
+  const expected = detectExactReply(prompt);
+  if (expected !== null) {
     const fr = ctx.latest("final_report", "final-report") as { reply?: string } | null;
     // At first render the final report does not exist yet; the check runs
     // once the report output has landed (the Ralph re-renders on new outputs).
     if (fr && typeof fr.reply === "string") {
-      const actual = fr.reply;
+      const actual = normalizeReply(fr.reply);
       if (actual !== expected) {
         throw new Error(
           "CompletionValidator FAILED: exact-reply mismatch. " +
           `Expected ${expected.length} bytes ${JSON.stringify(expected)}, ` +
-          `got ${actual.length} bytes ${JSON.stringify(actual)}.`
+          `got ${actual.length} bytes ${JSON.stringify(actual)} (normalized from ${JSON.stringify(fr.reply)}).`
         );
       }
     }
@@ -70,9 +72,12 @@ export function CompletionValidator({
   const finalReport = ctx.latest("final_report", "final-report") as {
     reply?: string;
   } | null;
+  // Judge the normalized reply: the validator must verify what the user
+  // actually sees (the CLI prints the quote-stripped form), not the raw
+  // stored bytes.
   const reply =
     typeof finalReport?.reply === "string" && finalReport.reply.length > 0
-      ? finalReport.reply
+      ? normalizeReply(finalReport.reply)
       : "(no final report was produced)";
   const replyBytes = Buffer.byteLength(reply, "utf8");
   const progressSummary = selectProgressSummary(ctx);

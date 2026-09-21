@@ -75,6 +75,7 @@ import type { CrossRunTicketState } from "./durability";
 import { useSuperRalph } from "./hooks/useSuperRalph";
 import type { SuperRalphContext, UseSuperRalphConfig } from "./hooks/useSuperRalph";
 import { ralphOutputSchemas } from "./schemas";
+import { detectExactReply, normalizeReply } from "./exactReply";
 import {
   NimProxyKeyPool,
   resolveProxyConfig,
@@ -139,6 +140,8 @@ export {
 
   // Schemas
   ralphOutputSchemas,
+  detectExactReply,
+  normalizeReply,
   clarifyingQuestionsOutputSchema,
   interpretConfigOutputSchema,
   monitorOutputSchema,

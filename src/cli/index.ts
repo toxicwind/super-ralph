@@ -29,6 +29,7 @@ import {
   isProxyBypassed,
   type ProxyConfig,
 } from "../nimProxy.ts";
+import { detectExactReply, normalizeReply } from "../exactReply.ts";
 
 type ParsedArgs = {
   positional: string[];
@@ -953,16 +954,15 @@ async function printFinalReply(dbPath: string, runId: string, headless: boolean,
     }
     db.close();
     if (row?.reply) {
-      let reply = String(row.reply);
-      // Deterministic exact-reply handling: agents often wrap the reply in
-      // quotes ("ALIVE" instead of ALIVE). Strip one pair of surrounding
-      // quotes, update the DB for consistency, then verify byte-for-byte.
-      const exactRe = /reply with exactly the word ([A-Za-z0-9]+)/i;
-      const m = promptText.match(exactRe);
-      if (m) {
-        const expected = m[1];
-        if (reply.length >= 2 && reply.startsWith('"') && reply.endsWith('"')) {
-          reply = reply.slice(1, -1).trim();
+      // Deterministic exact-reply handling: the raw DB row may carry the
+      // agent's surrounding quotes ("ALIVE" instead of ALIVE) because the zod
+      // transform does not propagate to persisted storage. Normalize to what
+      // the user actually sees, update the DB for consistency, then verify
+      // byte-for-byte.
+      let reply = normalizeReply(String(row.reply));
+      const expected = detectExactReply(promptText);
+      if (expected !== null) {
+        if (reply !== String(row.reply)) {
           try {
             const dbw = new Database(dbPath);
             dbw.query(`UPDATE final_report SET reply = ? WHERE run_id = ?`).run(reply, runId);
