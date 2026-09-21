@@ -3,7 +3,15 @@ import { Task } from "smithers-orchestrator";
 import { z } from "zod";
 
 export const finalReportOutputSchema = z.object({
-  reply: z.string().min(1).transform((s) => s.trim()),
+  reply: z.string().min(1).transform((s) => {
+    let t = s.trim();
+    // Agents often wrap exact replies in quotes ("ALIVE" instead of ALIVE).
+    // Strip a single pair of surrounding double-quotes; harmless for prose.
+    if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+      t = t.slice(1, -1).trim();
+    }
+    return t;
+  }),
 });
 
 export type FinalReportOutput = z.infer<typeof finalReportOutputSchema>;
