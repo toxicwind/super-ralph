@@ -1,13 +1,13 @@
 {
-  "name": "@sovereign/ranch",
+  "name": "@sovereign/taskforge",
   "version": "1.0.0",
-  "description": "Sovereign Ranch — Emergent multi-agent software engineering & ticket orchestration engine on Smithers with speculative merge queues, SQLite transaction grounding, and Telemetric EKG supervision (evolved from super-ralph lineage)",
+  "description": "Sovereign TaskForge — Emergent multi-agent software engineering & ticket orchestration engine on Smithers with speculative merge queues, SQLite transaction grounding, and Telemetric EKG supervision (evolved from super-ralph lineage)",
   "author": "Sovereign Fleet (orig. William Cory)",
   "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
   "bin": {
-    "ranch": "src/cli/index.ts",
+    "taskforge": "src/cli/index.ts",
     "ralph": "src/cli/index.ts",
     "super-ralph": "src/cli/index.ts"
   },
@@ -35,7 +35,8 @@
   "homepage": "https://github.com/roninjin10/super-ralph#readme",
   "keywords": [
     "sovereign",
-    "ranch",
+    "taskforge",
+    "forge",
     "ai",
     "workflow",
     "orchestration",

@@ -37,11 +37,11 @@ type ParsedArgs = {
 };
 
 function printHelp() {
-  console.log(`Sovereign Ranch (ranch / ralph) — Multi-Agent Engineering & Ticket Orchestration
+  console.log(`Sovereign TaskForge (taskforge / ralph) — Multi-Agent Engineering & Ticket Orchestration
 
 Usage:
-  ranch "prompt text"
-  ranch ./PROMPT.md
+  taskforge "prompt text"
+  taskforge ./PROMPT.md
   ralph ./specs/feature.md --max-concurrency 8
 
 Options:
@@ -54,8 +54,8 @@ Options:
   --help                          Show this help
 
 Examples:
-  ranch "Build a React todo app"
-  ranch ./specs/feature.md --max-concurrency 8
+  taskforge "Build a React todo app"
+  taskforge ./specs/feature.md --max-concurrency 8
   ralph "Add authentication" --skip-questions
 `);
 }
@@ -865,7 +865,7 @@ async function main() {
     : fallbackConfig.maxConcurrency;
 
   if (!headless) {
-      console.log(`🚀 Sovereign Ranch — Multi-Agent Ticket Orchestration`);
+      console.log(`🚀 Sovereign TaskForge — Multi-Agent Ticket Orchestration`);
       console.log(`📁 Repo: ${repoRoot}`);
       console.log(`📝 Prompt: ${promptSourcePath || "inline"}`);
       console.log(`🔧 Workflow: ${workflowPath}`);

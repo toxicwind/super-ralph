@@ -1,13 +1,13 @@
-# Sovereign Ranch (`ranch` / `ralph`) — Multi-Agent Engineering Engine
+# Sovereign TaskForge (`taskforge` / `ralph`) — Multi-Agent Engineering Engine
 
-[![Package](https://img.shields.io/badge/package-@sovereign/ranch-orange?logo=npm)](package.json)
+[![Package](https://img.shields.io/badge/package-@sovereign/taskforge-orange?logo=npm)](package.json)
 [![Bun](https://img.shields.io/badge/runtime-Bun%20v1.4.2-black?logo=bun)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org)
 [![Smithers](https://img.shields.io/badge/orchestrator-Smithers%200.32.0-purple)](https://smithers.sh)
 [![Tests](https://img.shields.io/badge/tests-46%20PASS%20%C2%B7%200%20FAIL-success)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Sovereign Ranch** (formerly *super-ralph*) is the evolved multi-agent software engineering & ticket orchestration engine for the Sovereign estate — orchestrating task graphs on [Smithers](https://smithers.sh) with a single-outer-loop finite convergence guarantee, speculative Jujutsu/Git merge queues, non-invasive SQLite database grounding, and Telemetric Cognitive EKG runtime supervision.
+> **Sovereign TaskForge** (formerly *super-ralph*) is the evolved multi-agent software engineering & ticket orchestration engine for the Sovereign estate — orchestrating task graphs on [Smithers](https://smithers.sh) with a single-outer-loop finite convergence guarantee, speculative Jujutsu/Git merge queues, non-invasive SQLite database grounding, and Telemetric Cognitive EKG runtime supervision.
 
 ---
 
@@ -19,7 +19,7 @@ flowchart TD
     Clarify --> PlanPass[InterpretConfig Planning Pass]
     PlanPass --> Gen[Generate .super-ralph/workflow.tsx]
     
-    subgraph RanchLoop["Sovereign Ranch Loop (Finite Convergence)"]
+    subgraph TaskForgeLoop["TaskForge Loop (Finite Convergence)"]
         direction TB
         Sched[TicketScheduler: Priority Queue & Capacity] --> Exec[Parallel Worktree Execution]
         
@@ -34,7 +34,7 @@ flowchart TD
         StagePipeline --> MergeQ[AgenticMergeQueue: Speculative CI & Landing]
     end
     
-    Gen --> RanchLoop
+    Gen --> TaskForgeLoop
     MergeQ --> Done{allWorkComplete?}
     Done -- No --> Sched
     Done -- Yes --> Settled[Clean Terminal State / Work Landed]
@@ -44,15 +44,15 @@ flowchart TD
 
 ## 2. Provenance & Evolutionary Divergence
 
-Sovereign Ranch began as a fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph) (William Cory) and [evmts/super-ralph](https://github.com/evmts/super-ralph), but has completely diverged into an emergent sovereign orchestration layer:
+Sovereign TaskForge began as a fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph) (William Cory) and [evmts/super-ralph](https://github.com/evmts/super-ralph), but has completely diverged into an emergent sovereign orchestration layer:
 
-| Architectural Component | Upstream `super-ralph` | Sovereign `ranch` |
+| Architectural Component | Upstream `super-ralph` | Sovereign `taskforge` |
 |---|---|---|
 | **Loop Topology** | 3 independent sibling loops (starvation/deadlock prone) | **Single unified outer Ralph loop** containing schedule $\to$ execute $\to$ merge with live `allWorkComplete` quiescence. |
 | **Model Routing** | Direct cloud API calls with hardcoded provider keys | **Sovereign Router (`:25104`) integration** with 114 curated models, ELO balancing, and keyless local fallback. |
 | **Runtime Supervision** | None / manual terminal tracking | **Telemetric Cognitive EKG (`telemetricOracle.ts`)** with non-invasive SQLite state grounding. |
 | **Workspace Merge** | Basic sequential merging | **Speculative multi-depth merge queue** testing concurrent changes in temporary JJ/Git workspaces. |
-| **CLI & Execution** | Fixed CLI naming | Dual CLI binaries: **`ranch`** and backward-compatible **`ralph`**. |
+| **CLI & Execution** | Fixed CLI naming | Dual CLI binaries: **`taskforge`** and backward-compatible **`ralph`**. |
 
 ---
 
@@ -61,17 +61,17 @@ Sovereign Ranch began as a fork of [roninjin10/super-ralph](https://github.com/r
 Launch any specification or natural language task:
 
 ```bash
-# Launch with canonical 'ranch' command
-ranch "Implement distributed transaction coordinator"
+# Launch with canonical 'taskforge' command
+taskforge "Implement distributed transaction coordinator"
 
 # Or use the classic 'ralph' alias
 ralph ./specs/feature.md --max-concurrency 8
 
 # Non-interactive / CI mode
-ranch "Fix authentication timeout" --skip-questions --max-iterations 15
+taskforge "Fix authentication timeout" --skip-questions --max-iterations 15
 
 # Dry run (generate workflow without starting engine)
-ranch ./PROMPT.md --dry-run
+taskforge ./PROMPT.md --dry-run
 ```
 
 ### CLI Flags
