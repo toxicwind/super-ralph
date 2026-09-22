@@ -1,12 +1,13 @@
-# Super Ralph — Multi-Agent Ticket Orchestration Engine
+# Sovereign Ranch (`ranch` / `ralph`) — Multi-Agent Engineering Engine
 
+[![Package](https://img.shields.io/badge/package-@sovereign/ranch-orange?logo=npm)](package.json)
 [![Bun](https://img.shields.io/badge/runtime-Bun%20v1.4.2-black?logo=bun)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org)
 [![Smithers](https://img.shields.io/badge/orchestrator-Smithers%200.32.0-purple)](https://smithers.sh)
-[![Tests](https://img.shields.io/badge/tests-42%20PASS%20%C2%B7%200%20FAIL-success)](tests/)
+[![Tests](https://img.shields.io/badge/tests-46%20PASS%20%C2%B7%200%20FAIL-success)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Super Ralph is the sovereign multi-agent software engineering loop** — an opinionated [Smithers](https://smithers.sh) orchestration engine combining ticket-driven decomposition, parallel task execution across isolated worktrees, multi-agent review gates, and a speculative Jujutsu/Git merge queue into a single finite, self-terminating Ralph loop.
+> **Sovereign Ranch** (formerly *super-ralph*) is the evolved multi-agent software engineering & ticket orchestration engine for the Sovereign estate — orchestrating task graphs on [Smithers](https://smithers.sh) with a single-outer-loop finite convergence guarantee, speculative Jujutsu/Git merge queues, non-invasive SQLite database grounding, and Telemetric Cognitive EKG runtime supervision.
 
 ---
 
@@ -14,13 +15,13 @@
 
 ```mermaid
 flowchart TD
-    Prompt[User Prompt / PRD Spec] --> Clarify[ClarifyingQuestions UI]
+    Prompt[User Prompt / Specification] --> Clarify[ClarifyingQuestions UI]
     Clarify --> PlanPass[InterpretConfig Planning Pass]
     PlanPass --> Gen[Generate .super-ralph/workflow.tsx]
     
-    subgraph RalphLoop["Single Outer Ralph Loop (Finite Convergence)"]
+    subgraph RanchLoop["Sovereign Ranch Loop (Finite Convergence)"]
         direction TB
-        Sched[TicketScheduler: Compute Next Stage & Capacity] --> Exec[Parallel Worktree Execution]
+        Sched[TicketScheduler: Priority Queue & Capacity] --> Exec[Parallel Worktree Execution]
         
         subgraph StagePipeline["Per-Ticket 5-Stage Pipeline"]
             Research[1. Research] --> Plan[2. Plan]
@@ -33,7 +34,7 @@ flowchart TD
         StagePipeline --> MergeQ[AgenticMergeQueue: Speculative CI & Landing]
     end
     
-    Gen --> RalphLoop
+    Gen --> RanchLoop
     MergeQ --> Done{allWorkComplete?}
     Done -- No --> Sched
     Done -- Yes --> Settled[Clean Terminal State / Work Landed]
@@ -41,37 +42,36 @@ flowchart TD
 
 ---
 
-## 2. Core Guarantees & Convergence
+## 2. Provenance & Evolutionary Divergence
 
-1. **Finite-by-Default Execution**:
-   - Every loop evaluates a live quiescence predicate (`allWorkComplete`).
-   - `maxIterations` defaults to `25` with `onMaxReached="fail"` — zero silent runaway loops.
-   - Unified on 2026-09-21 into a single outer loop containing scheduling, execution, and merging, guaranteeing deterministic pipeline convergence.
-2. **Hermetic Worktree Isolation**:
-   - Each ticket executes within an isolated Jujutsu (`jj`) or Git workspace (`/tmp/workflow-wt-<ticketId>`).
-   - Speculative merge queue tests concurrent changes before mainline landing.
-3. **Multi-Agent Diversity**:
-   - Pluggable agent pools (Claude, Codex, Tau, Kimi, local Herd models).
-   - Dedicated review gates (`SpecReview`, `CodeReview`, `ReviewFix`) ensure no unverified code reaches the merge queue.
+Sovereign Ranch began as a fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph) (William Cory) and [evmts/super-ralph](https://github.com/evmts/super-ralph), but has completely diverged into an emergent sovereign orchestration layer:
+
+| Architectural Component | Upstream `super-ralph` | Sovereign `ranch` |
+|---|---|---|
+| **Loop Topology** | 3 independent sibling loops (starvation/deadlock prone) | **Single unified outer Ralph loop** containing schedule $\to$ execute $\to$ merge with live `allWorkComplete` quiescence. |
+| **Model Routing** | Direct cloud API calls with hardcoded provider keys | **Sovereign Router (`:25104`) integration** with 114 curated models, ELO balancing, and keyless local fallback. |
+| **Runtime Supervision** | None / manual terminal tracking | **Telemetric Cognitive EKG (`telemetricOracle.ts`)** with non-invasive SQLite state grounding. |
+| **Workspace Merge** | Basic sequential merging | **Speculative multi-depth merge queue** testing concurrent changes in temporary JJ/Git workspaces. |
+| **CLI & Execution** | Fixed CLI naming | Dual CLI binaries: **`ranch`** and backward-compatible **`ralph`**. |
 
 ---
 
 ## 3. CLI Quickstart
 
-Launch any prompt or specification file directly:
+Launch any specification or natural language task:
 
 ```bash
-# Direct task launch
-ralph "Build a high-performance SSE event bridge with token budgeting"
+# Launch with canonical 'ranch' command
+ranch "Implement distributed transaction coordinator"
 
-# Launch from specification markdown
-super-ralph ./specs/feature.md --max-concurrency 8
+# Or use the classic 'ralph' alias
+ralph ./specs/feature.md --max-concurrency 8
 
-# Non-interactive / headless CI mode
-ralph "Implement SQLite state store" --skip-questions --max-iterations 15
+# Non-interactive / CI mode
+ranch "Fix authentication timeout" --skip-questions --max-iterations 15
 
-# Dry run (generates .super-ralph/workflow.tsx without executing)
-super-ralph ./PROMPT.md --dry-run
+# Dry run (generate workflow without starting engine)
+ranch ./PROMPT.md --dry-run
 ```
 
 ### CLI Flags
@@ -79,45 +79,16 @@ super-ralph ./PROMPT.md --dry-run
 | Flag | Type | Description | Default |
 |---|---|---|---|
 | `--cwd <path>` | `string` | Target repository root | Current working directory |
-| `--max-concurrency <n>` | `number` | Maximum parallel active jobs | `4` (or CPU-bound) |
+| `--max-concurrency <n>` | `number` | Maximum parallel active tickets | `4` |
 | `--max-iterations <n>` | `number` | Hard loop ceiling for Ralph convergence | `25` |
 | `--skip-questions` | `boolean` | Bypass interactive clarification phase | `false` |
-| `--dry-run` | `boolean` | Generate `.super-ralph/` without starting engine | `false` |
+| `--dry-run` | `boolean` | Generate workflow files without executing | `false` |
 | `--run-id <id>` | `string` | Explicit Smithers run identifier | Auto-generated UUID |
 
 ---
 
-## 4. Component Hierarchy
+## 4. Verification & Quality Gates
 
-```text
-super-ralph/
-├── src/
-│   ├── cli/
-│   │   ├── index.ts               # CLI front door, argument parser, workflow generator
-│   │   └── clarifications.ts      # Interactive terminal clarification UI
-│   ├── components/
-│   │   ├── SuperRalph.tsx         # Unified finite Ralph loop container
-│   │   ├── TicketScheduler.tsx    # Dynamic priority & capacity scheduler
-│   │   ├── Job.tsx                # Worktree execution wrapper
-│   │   ├── AgenticMergeQueue.tsx  # Speculative jj/git merge queue component
-│   │   ├── ClarifyingQuestions.tsx# Workflow clarification task
-│   │   ├── CompletionValidator.tsx# Stage output verifier
-│   │   └── TicketResume.tsx       # Cross-run state recovery & durability
-│   ├── mergeQueue/
-│   │   └── coordinator.ts         # Speculative workspace coordinator
-│   ├── prompts/                   # Mdx prompt templates (Research, Plan, Implement, etc.)
-│   ├── selectors.ts               # State selectors, ticket extraction, normalization
-│   └── schemas.ts                 # Zod output schemas
-└── tests/
-    ├── finite-default.test.ts     # Loop termination & budget acceptance tests
-    ├── exact-reply.test.ts        # Fast-path string normalization tests
-    └── prompt-renderer.test.ts    # Prompt compilation & rendering tests
-```
-
----
-
-## 5. Provenance & Lineage
-
-- **Lineage**: Reusable Ralph workflow pattern, fork of `roninjin10/super-ralph`, integrated into the Sovereign Mesh ecosystem (`/home/toxic/sovereign/projects/mesh/super-ralph`).
-- **Smithers Orchestration**: Built on `@smithers-orchestrator` v0.32.0, leveraging React-reconciled task graphs with SQLite persistence.
-- **Verification**: 42/42 unit & integration tests passing (`bun test`), 0 TypeScript diagnostics (`tsc --noEmit`).
+- **Unit & Integration Suite**: **46/46 tests passing** (`bun test`).
+- **TypeScript Typecheck**: **0 diagnostics** (`tsc --noEmit` clean).
+- **Syntax Guard**: Verified clean via `syntax-guard` (Rust AST linters).

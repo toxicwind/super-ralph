@@ -37,11 +37,12 @@ type ParsedArgs = {
 };
 
 function printHelp() {
-  console.log(`Super Ralph - Smithers Workflow Edition
+  console.log(`Sovereign Ranch (ranch / ralph) — Multi-Agent Engineering & Ticket Orchestration
 
 Usage:
-  super-ralph "prompt text"
-  super-ralph ./PROMPT.md
+  ranch "prompt text"
+  ranch ./PROMPT.md
+  ralph ./specs/feature.md --max-concurrency 8
 
 Options:
   --cwd <path>                    Repo root (default: current directory)
@@ -53,9 +54,9 @@ Options:
   --help                          Show this help
 
 Examples:
-  super-ralph "Build a React todo app"
-  super-ralph ./specs/feature.md --max-concurrency 8
-  super-ralph "Add authentication" --skip-questions
+  ranch "Build a React todo app"
+  ranch ./specs/feature.md --max-concurrency 8
+  ralph "Add authentication" --skip-questions
 `);
 }
 
@@ -864,6 +865,7 @@ async function main() {
     : fallbackConfig.maxConcurrency;
 
   if (!headless) {
+      console.log(`🚀 Sovereign Ranch — Multi-Agent Ticket Orchestration`);
       console.log(`📁 Repo: ${repoRoot}`);
       console.log(`📝 Prompt: ${promptSourcePath || "inline"}`);
       console.log(`🔧 Workflow: ${workflowPath}`);

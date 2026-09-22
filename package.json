@@ -1,12 +1,14 @@
 {
-  "name": "super-ralph",
-  "version": "0.3.2",
-  "description": "Reusable Ralph workflow pattern - ticket-driven development with multi-agent review loops",
-  "author": "William Cory",
+  "name": "@sovereign/ranch",
+  "version": "1.0.0",
+  "description": "Sovereign Ranch — Emergent multi-agent software engineering & ticket orchestration engine on Smithers with speculative merge queues, SQLite transaction grounding, and Telemetric EKG supervision (evolved from super-ralph lineage)",
+  "author": "Sovereign Fleet (orig. William Cory)",
   "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
   "bin": {
+    "ranch": "src/cli/index.ts",
+    "ralph": "src/cli/index.ts",
     "super-ralph": "src/cli/index.ts"
   },
   "exports": {
@@ -32,6 +34,8 @@
   },
   "homepage": "https://github.com/roninjin10/super-ralph#readme",
   "keywords": [
+    "sovereign",
+    "ranch",
     "ai",
     "workflow",
     "orchestration",
