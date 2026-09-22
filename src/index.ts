@@ -89,6 +89,8 @@ import {
   DEFAULT_PROXY_MODEL,
 } from "./nimProxy";
 import type { ProxyConfig, ProxyKeyStats } from "./nimProxy";
+import { TelemetricOracle } from "./telemetricOracle";
+import type { TelemetryVector, OracleVerdict, CognitiveState } from "./telemetricOracle";
 
 export {
   // Selectors
@@ -157,6 +159,9 @@ export {
   NimProxyConfigError,
   DEFAULT_PROXY_BASE_URL,
   DEFAULT_PROXY_MODEL,
+
+  // Telemetric Oracle EKG
+  TelemetricOracle,
 };
 
 export type {
@@ -186,4 +191,7 @@ export type {
   CrossRunTicketState,
   ProxyConfig,
   ProxyKeyStats,
+  TelemetryVector,
+  OracleVerdict,
+  CognitiveState,
 };
