@@ -1,33 +1,46 @@
 /**
- * telemetricOracle.ts — In-Loop & Out-of-Band Cognitive EKG Supervisor for Super Ralph.
+ * telemetricOracle.ts — Non-Invasive Database & Telemetry Grounding Supervisor for Super Ralph.
  *
- * Mathematical modeling of runtime thermodynamics:
- * - Context Boundary Saturation (S_ctx)
- * - Generative Efficiency Ratio (\eta_gen)
- * - Cognitive Entropy Density (H_cog)
- * - Dynamic Expected Value & Deliberation Lock Guard
+ * Core Architecture Principles:
+ * 1. Zero Keystroke Injection: No tmux send-keys, no C-c, no prompt contamination.
+ * 2. Model Integrity: Anchors to the 114-model Sovereign Router (:25104) without socket overriding.
+ * 3. Database Grounding: Real-time observation of .super-ralph/workflow.db SQLite state.
+ * 4. Multi-Ticket Awareness: Concurrency drops and latency fluctuations treated as natural barrier syncs.
  */
+
+import { existsSync } from "node:fs";
+import { Database } from "bun:sqlite";
 
 export interface TelemetryVector {
   timestamp: string;
   elapsedSeconds: number;
-  tokensIn: number;      // Drop count / Ingestion mass
-  tokensOut: number;     // Leave count / Generative yield
+  tokensIn: number;      // Ingestion mass
+  tokensOut: number;     // Generative yield
   tokensContext: number; // Active context horizon
   durationSeconds: number;
   velocityTokPerSec: number;
 }
 
-export type CognitiveState = "NOMINAL" | "SATURATED" | "THRASHING" | "STALLED";
+export interface WorkflowDbState {
+  dbExists: boolean;
+  totalTickets: number;
+  completedTickets: number;
+  inProgressTickets: number;
+  activeConcurrency: number;
+  currentIteration: number;
+  maxIterations: number;
+  isQuiescent: boolean;
+  lastStateChange: string | null;
+}
 
-export interface OracleVerdict {
-  state: CognitiveState;
-  generativeEfficiency: number; // tokensOut / tokensIn
-  contextSaturationPct: number; // tokensContext / contextCeiling
+export interface NonInvasiveVerdict {
+  timestamp: string;
+  contextSaturationPct: number;
+  generativeEfficiency: number;
   entropyIndex: number;
-  thrashProbability: number;
-  urgentAction: string | null;
-  advisoryMessage: string | null;
+  velocityTokPerSec: number;
+  workflowState: WorkflowDbState | null;
+  observabilitySummary: string;
 }
 
 export class TelemetricOracle {
@@ -38,20 +51,17 @@ export class TelemetricOracle {
     this.contextCeiling = contextCeiling;
   }
 
-  /**
-   * Parse a raw terminal HUD telemetry line.
-   */
   parseHudLine(line: string): TelemetryVector | null {
     const raw = line.trim();
     if (!raw) return null;
 
     const tsMatch = raw.match(/\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]/);
     const deltaMatch = raw.match(/Δ\s*(\d+m)?(\d+s)?/);
-    const inMatch = raw.match(/In:\s*([\d\.]+)(K|M)?/i);
-    const outMatch = raw.match(/Out:\s*([\d\.]+)(K|M)?/i);
-    const totalMatch = raw.match(/Total:\s*([\d\.]+)(K|M)?/i);
-    const durationMatch = raw.match(/([\d\.]+)s\s*\(/);
-    const rateMatch = raw.match(/\(([\d\.]+)\/s\)/);
+    const inMatch = raw.match(/In:\s*([\d.]+)(K|M)?/i);
+    const outMatch = raw.match(/Out:\s*([\d.]+)(K|M)?/i);
+    const totalMatch = raw.match(/Total:\s*([\d.]+)(K|M)?/i);
+    const durationMatch = raw.match(/([\d.]+)s\s*\(/);
+    const rateMatch = raw.match(/\(([\d.]+)\/s\)/);
 
     if (!tsMatch) return null;
 
@@ -89,67 +99,99 @@ export class TelemetricOracle {
     if (this.history.length > 50) this.history.shift();
   }
 
-  /**
-   * Evaluate a turn vector programmatically.
-   */
-  evaluateTurn(
-    tokensIn: number,
-    tokensOut: number,
-    tokensContext: number,
-    durationSeconds = 1.0,
-    velocityTokPerSec = 0
-  ): OracleVerdict {
-    const v: TelemetryVector = {
-      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
-      elapsedSeconds: 0,
-      tokensIn,
-      tokensOut,
-      tokensContext,
-      durationSeconds,
-      velocityTokPerSec: velocityTokPerSec || (durationSeconds > 0 ? tokensOut / durationSeconds : 0),
-    };
-    return this.evaluate(v);
-  }
-
-  /**
-   * Evaluates cognitive health via Bayesian state transitions.
-   */
-  evaluate(vector: TelemetryVector): OracleVerdict {
-    const etaGen = vector.tokensIn > 0 ? vector.tokensOut / vector.tokensIn : 1.0;
-    const saturation = (vector.tokensContext / this.contextCeiling) * 100;
-    
-    let thrashScore = 0;
-    if (saturation > 85) thrashScore += 0.4;
-    if (etaGen < 0.1) thrashScore += 0.35;
-    if (vector.durationSeconds > 10 && vector.velocityTokPerSec < 20) thrashScore += 0.25;
-    const pThrash = Math.min(1.0, Math.max(0.0, thrashScore));
-
-    let state: CognitiveState = "NOMINAL";
-    let action: string | null = null;
-    let advisory: string | null = null;
-
-    if (pThrash >= 0.75 || (saturation >= 88 && etaGen < 0.2)) {
-      state = "THRASHING";
-      action = "EMERGENCY_COMPACT_AND_EVICT";
-      advisory = `[ORACLE CRITICAL] Attention saturation ${saturation.toFixed(1)}% breached with low yield (${(etaGen * 100).toFixed(1)}%). State eviction required.`;
-    } else if (saturation >= 80) {
-      state = "SATURATED";
-      action = "SCHEDULE_CONTEXT_CHECKPOINT";
-      advisory = `[ORACLE ADVISORY] Context saturation at ${saturation.toFixed(1)}%. Checkpoint state before next iteration.`;
-    } else if (vector.velocityTokPerSec < 5 && vector.durationSeconds > 15) {
-      state = "STALLED";
-      action = "ROUTE_SHIFT_LLAMA_SWAP";
-      advisory = `[ORACLE WARN] Token throughput stalled (${vector.velocityTokPerSec.toFixed(1)} tok/s). Recommend shifting route to local herd :25100.`;
+  inspectWorkflowDb(dbPath: string): WorkflowDbState {
+    if (!existsSync(dbPath)) {
+      return {
+        dbExists: false,
+        totalTickets: 0,
+        completedTickets: 0,
+        inProgressTickets: 0,
+        activeConcurrency: 0,
+        currentIteration: 0,
+        maxIterations: 25,
+        isQuiescent: false,
+        lastStateChange: null,
+      };
     }
 
+    try {
+      const db = new Database(dbPath, { readonly: true });
+      const tables = db.query("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
+      const tableSet: Record<string, true> = {};
+      for (const t of tables) tableSet[t.name] = true;
+
+      let total = 0;
+      let completed = 0;
+      let inProgress = 0;
+      let iteration = 0;
+      let quiescent = false;
+
+      if (tableSet["nodes"]) {
+        const nodeStats = db.query("SELECT status, count(*) as count FROM nodes GROUP BY status").all() as Array<{ status: string; count: number }>;
+        for (const row of nodeStats) {
+          if (row.status === "completed") completed += row.count;
+          if (row.status === "running" || row.status === "in_progress") inProgress += row.count;
+          total += row.count;
+        }
+      }
+
+      if (tableSet["runs"]) {
+        const runRow = db.query("SELECT status, iteration FROM runs ORDER BY created_at DESC LIMIT 1").get() as { status?: string; iteration?: number } | null;
+        if (runRow) {
+          iteration = runRow.iteration ?? 0;
+          quiescent = runRow.status === "completed";
+        }
+      }
+
+      db.close();
+
+      return {
+        dbExists: true,
+        totalTickets: total,
+        completedTickets: completed,
+        inProgressTickets: inProgress,
+        activeConcurrency: inProgress,
+        currentIteration: iteration,
+        maxIterations: 25,
+        isQuiescent: quiescent,
+        lastStateChange: new Date().toISOString(),
+      };
+    } catch {
+      return {
+        dbExists: true,
+        totalTickets: 0,
+        completedTickets: 0,
+        inProgressTickets: 0,
+        activeConcurrency: 0,
+        currentIteration: 0,
+        maxIterations: 25,
+        isQuiescent: false,
+        lastStateChange: null,
+      };
+    }
+  }
+
+  evaluate(vector: TelemetryVector, dbPath?: string): NonInvasiveVerdict {
+    const etaGen = vector.tokensIn > 0 ? vector.tokensOut / vector.tokensIn : 1.0;
+    const saturation = (vector.tokensContext / this.contextCeiling) * 100;
+    const dbState = dbPath ? this.inspectWorkflowDb(dbPath) : null;
+
+    const summary = [
+      `[Telemetry EKG] Saturation: ${saturation.toFixed(1)}% (${(vector.tokensContext / 1000).toFixed(0)}K / ${(this.contextCeiling / 1000).toFixed(0)}K)`,
+      `Yield: ${(etaGen * 100).toFixed(1)}% | Velocity: ${vector.velocityTokPerSec.toFixed(1)} tok/s`,
+      dbState?.dbExists
+        ? `Database Grounding: ${dbState.completedTickets}/${dbState.totalTickets} settled | In-flight: ${dbState.activeConcurrency} | Iteration: ${dbState.currentIteration}/${dbState.maxIterations}`
+        : "Database Grounding: workflow.db initializing",
+    ].join(" · ");
+
     return {
-      state,
-      generativeEfficiency: Number(etaGen.toFixed(4)),
+      timestamp: vector.timestamp,
       contextSaturationPct: Number(saturation.toFixed(2)),
+      generativeEfficiency: Number(etaGen.toFixed(4)),
       entropyIndex: Number((saturation * (1 - etaGen)).toFixed(2)),
-      thrashProbability: Number(pThrash.toFixed(2)),
-      urgentAction: action,
-      advisoryMessage: advisory,
+      velocityTokPerSec: vector.velocityTokPerSec,
+      workflowState: dbState,
+      observabilitySummary: summary,
     };
   }
 

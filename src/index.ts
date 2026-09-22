@@ -90,7 +90,7 @@ import {
 } from "./nimProxy";
 import type { ProxyConfig, ProxyKeyStats } from "./nimProxy";
 import { TelemetricOracle } from "./telemetricOracle";
-import type { TelemetryVector, OracleVerdict, CognitiveState } from "./telemetricOracle";
+import type { TelemetryVector, NonInvasiveVerdict, WorkflowDbState } from "./telemetricOracle";
 
 export {
   // Selectors
@@ -192,6 +192,6 @@ export type {
   ProxyConfig,
   ProxyKeyStats,
   TelemetryVector,
-  OracleVerdict,
-  CognitiveState,
+  NonInvasiveVerdict,
+  WorkflowDbState,
 };

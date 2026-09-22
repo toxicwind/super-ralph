@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TelemetricOracle, type TelemetryVector } from "../src/telemetricOracle";
 
-describe("TelemetricOracle", () => {
+describe("TelemetricOracle — Non-Invasive Database & Telemetry Grounding", () => {
   const oracle = new TelemetricOracle(300_000);
 
   test("parses canonical Sovereign HUD telemetry string accurately", () => {
@@ -17,7 +17,7 @@ describe("TelemetricOracle", () => {
     expect(vec?.velocityTokPerSec).toBe(115.0);
   });
 
-  test("evaluates context saturation and generative efficiency on deep context turn", () => {
+  test("evaluates context saturation and generative efficiency without keystroke injection", () => {
     const vec: TelemetryVector = {
       timestamp: "2026-09-22 07:43:59",
       elapsedSeconds: 93,
@@ -30,42 +30,15 @@ describe("TelemetricOracle", () => {
     const verdict = oracle.evaluate(vec);
     expect(verdict.contextSaturationPct).toBeCloseTo(89.33, 1);
     expect(verdict.generativeEfficiency).toBeCloseTo(0.3793, 2);
-    expect(verdict.state).toBe("SATURATED");
-    expect(verdict.urgentAction).toBe("SCHEDULE_CONTEXT_CHECKPOINT");
-    expect(verdict.advisoryMessage).toContain("Context saturation");
+    expect(verdict.observabilitySummary).toContain("Saturation: 89.3%");
+    expect(verdict.observabilitySummary).toContain("115.0 tok/s");
   });
 
-  test("triggers THRASHING state when context is near ceiling with sub-minimal output", () => {
-    const vec: TelemetryVector = {
-      timestamp: "2026-09-22 07:50:00",
-      elapsedSeconds: 240,
-      tokensIn: 8500,
-      tokensOut: 60, // Minimal yield (inspect loop)
-      tokensContext: 285000, // 95% saturation
-      durationSeconds: 8.2,
-      velocityTokPerSec: 7.3,
-    };
-    const verdict = oracle.evaluate(vec);
-    expect(verdict.state).toBe("THRASHING");
-    expect(verdict.generativeEfficiency).toBeLessThan(0.01);
-    expect(verdict.urgentAction).toBe("EMERGENCY_COMPACT_AND_EVICT");
-    expect(verdict.advisoryMessage).toContain("[ORACLE CRITICAL]");
-  });
-
-  test("classifies nominal healthy execution", () => {
-    const vec: TelemetryVector = {
-      timestamp: "2026-09-22 07:10:00",
-      elapsedSeconds: 15,
-      tokensIn: 1200,
-      tokensOut: 800,
-      tokensContext: 15000,
-      durationSeconds: 3.2,
-      velocityTokPerSec: 120.0,
-    };
-    const verdict = oracle.evaluate(vec);
-    expect(verdict.state).toBe("NOMINAL");
-    expect(verdict.urgentAction).toBeNull();
-    expect(verdict.contextSaturationPct).toBe(5.0);
+  test("inspects workflow.db state safely", () => {
+    const state = oracle.inspectWorkflowDb("/non/existent/workflow.db");
+    expect(state.dbExists).toBe(false);
+    expect(state.maxIterations).toBe(25);
+    expect(state.isQuiescent).toBe(false);
   });
 
   test("formats vector back to standard HUD format", () => {
