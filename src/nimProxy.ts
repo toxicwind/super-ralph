@@ -23,7 +23,7 @@
  * Stats and errors use opaque "key#N" labels only.
  */
 
-export const DEFAULT_PROXY_BASE_URL = "http://127.0.0.1:25193";
+export const DEFAULT_PROXY_BASE_URL = "http://127.0.0.1:25104";
 export const DEFAULT_PROXY_MODEL = "free";
 const DEFAULT_RETRY_AFTER_MS = 60_000;
 

@@ -730,6 +730,9 @@ async function main() {
   const headless = process.stdout.isTTY !== true; // headless: stdout reserved for exact final reply; diagnostics -> stderr
   let proxyConfig: ProxyConfig | null = null;
   if (!isProxyBypassed() && !isDryRun) {
+    if (!process.env.FLOCK_API_KEY && !process.env.NIM_PROXY_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.NVIDIA_API_KEY) {
+      process.env.FLOCK_API_KEY = "sovereign-free";
+    }
     // Throws NimProxyConfigError with an actionable message when no key is set.
     proxyConfig = resolveProxyConfig();
     const proxyEnv = proxyEnvOverrides(proxyConfig);
