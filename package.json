@@ -1,14 +1,15 @@
 {
-  "name": "@sovereign/taskforge",
+  "name": "@sovereign/corral",
   "version": "1.0.0",
-  "description": "Sovereign TaskForge — Emergent multi-agent software engineering & ticket orchestration engine on Smithers with speculative merge queues, SQLite transaction grounding, and Telemetric EKG supervision (evolved from super-ralph lineage)",
+  "description": "Sovereign Corral — Multi-agent ticket-driven development & speculative merge queue orchestrator on Smithers (evolved from super-ralph lineage)",
   "author": "Sovereign Fleet (orig. William Cory)",
   "license": "MIT",
   "type": "module",
   "module": "src/index.ts",
   "bin": {
-    "taskforge": "src/cli/index.ts",
+    "corral": "src/cli/index.ts",
     "ralph": "src/cli/index.ts",
+    "taskforge": "src/cli/index.ts",
     "super-ralph": "src/cli/index.ts"
   },
   "exports": {
@@ -35,8 +36,8 @@
   "homepage": "https://github.com/roninjin10/super-ralph#readme",
   "keywords": [
     "sovereign",
-    "taskforge",
-    "forge",
+    "corral",
+    "ranch",
     "ai",
     "workflow",
     "orchestration",
