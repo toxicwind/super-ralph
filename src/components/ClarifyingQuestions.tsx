@@ -1,5 +1,5 @@
 import React from "react";
-import type { SmithersCtx } from "smithers-orchestrator";
+import type { SmithersCtx } from "../selectors";
 import { Task, Sequence } from "smithers-orchestrator";
 import type { ClarificationQuestion, ClarificationAnswer, ClarificationSession } from "../cli/clarifications";
 import { z } from "zod";

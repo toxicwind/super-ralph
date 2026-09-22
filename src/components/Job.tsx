@@ -1,8 +1,8 @@
 import React from "react";
 import { Worktree, Task } from "smithers-orchestrator";
-import type { SmithersCtx, AgentLike } from "smithers-orchestrator";
+import type { AgentLike } from "smithers-orchestrator";
 import { selectResearch, selectPlan, selectImplement, selectTestResults, selectSpecReview, selectCodeReviews, selectLand } from "../selectors";
-import type { RalphOutputs, Ticket } from "../selectors";
+import type { RalphOutputs, Ticket, SmithersCtx } from "../selectors";
 import type { ScheduledJob } from "../scheduledTasks";
 import { jobNodeId } from "./TicketScheduler";
 import UpdateProgressPrompt from "../prompts/UpdateProgress.mdx";

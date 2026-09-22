@@ -1,6 +1,6 @@
 import React from "react";
 import { Task } from "smithers-orchestrator";
-import type { SmithersCtx } from "smithers-orchestrator";
+import type { SmithersCtx } from "../selectors";
 import { getResumableTickets, pipelineStageIndex, type CrossRunTicketState } from "../durability";
 
 export type TicketResumeProps = {

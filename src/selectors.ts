@@ -1,4 +1,8 @@
-import type { SmithersCtx } from "smithers-orchestrator";
+import type { SmithersCtx as BaseSmithersCtx } from "smithers-orchestrator";
+export type SmithersCtx<T = unknown> = BaseSmithersCtx & {
+  outputs: <K = any>(key?: K) => any;
+  output: <K = any>(key?: K) => any;
+};
 import type { ralphOutputSchemas } from "./schemas";
 
 /**

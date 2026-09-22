@@ -1,7 +1,7 @@
 import { Ralph, Parallel } from "smithers-orchestrator";
-import type { SmithersCtx, AgentLike } from "smithers-orchestrator";
+import type { AgentLike } from "smithers-orchestrator";
 import { selectAllTickets, selectReviewTickets, selectProgressSummary, selectLand, selectTicketReport } from "../selectors";
-import type { RalphOutputs, Ticket } from "../selectors";
+import type { RalphOutputs, Ticket, SmithersCtx } from "../selectors";
 import React, { type ReactNode } from "react";
 import { type MergeQueueOrderingStrategy } from "../mergeQueue/coordinator";
 import { computePipelineStage, isJobComplete, type TicketSchedule, type TicketState } from "./TicketScheduler";

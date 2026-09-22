@@ -46,8 +46,9 @@ describe("finite-by-default", () => {
     expect(code).not.toContain("Infinity");
     // one shared quiescence predicate drives all three loop exits
     expect(code).toContain("allWorkComplete");
+    // 2026-09-21: unified into a single outer Ralph loop containing all 3 phases
     const untilCount = (code.match(/until=\{allWorkComplete\}/g) ?? []).length;
-    expect(untilCount).toBe(3);
+    expect(untilCount).toBe(1);
     expect(code).toContain("maxIterations={maxIterations}");
     expect(code).toContain('onMaxReached="fail"');
   });

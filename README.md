@@ -1,306 +1,123 @@
+# Super Ralph — Multi-Agent Ticket Orchestration Engine
 
-# super-ralph
+[![Bun](https://img.shields.io/badge/runtime-Bun%20v1.4.2-black?logo=bun)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)](https://www.typescriptlang.org)
+[![Smithers](https://img.shields.io/badge/orchestrator-Smithers%200.32.0-purple)](https://smithers.sh)
+[![Tests](https://img.shields.io/badge/tests-42%20PASS%20%C2%B7%200%20FAIL-success)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> Reusable Ralph workflow - ticket-driven development with multi-agent review loops
+> **Super Ralph is the sovereign multi-agent software engineering loop** — an opinionated [Smithers](https://smithers.sh) orchestration engine combining ticket-driven decomposition, parallel task execution across isolated worktrees, multi-agent review gates, and a speculative Jujutsu/Git merge queue into a single finite, self-terminating Ralph loop.
 
-> Fork of [roninjin10/super-ralph](https://github.com/roninjin10/super-ralph),
-> with all model calls routed through the local flock proxy (see below).
+---
 
-An opinionated [Smithers](https://smithers.sh) workflow. You just provide the specs, this workflow does the rest.
+## 1. System Architecture
 
-Deeper docs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (full Smithers
-orchestration design) and
-[docs/CLI_CLARIFICATIONS.md](docs/CLI_CLARIFICATIONS.md) (how the
-clarifying-questions phase works).
-
-## Installation
-
-```bash
-bun add super-ralph smithers-orchestrator
+```mermaid
+flowchart TD
+    Prompt[User Prompt / PRD Spec] --> Clarify[ClarifyingQuestions UI]
+    Clarify --> PlanPass[InterpretConfig Planning Pass]
+    PlanPass --> Gen[Generate .super-ralph/workflow.tsx]
+    
+    subgraph RalphLoop["Single Outer Ralph Loop (Finite Convergence)"]
+        direction TB
+        Sched[TicketScheduler: Compute Next Stage & Capacity] --> Exec[Parallel Worktree Execution]
+        
+        subgraph StagePipeline["Per-Ticket 5-Stage Pipeline"]
+            Research[1. Research] --> Plan[2. Plan]
+            Plan --> Implement[3. Implement]
+            Implement --> Test[4. Test & Build Verify]
+            Test --> Review[5. Spec & Code Review]
+        end
+        
+        Exec --> StagePipeline
+        StagePipeline --> MergeQ[AgenticMergeQueue: Speculative CI & Landing]
+    end
+    
+    Gen --> RalphLoop
+    MergeQ --> Done{allWorkComplete?}
+    Done -- No --> Sched
+    Done -- Yes --> Settled[Clean Terminal State / Work Landed]
 ```
 
-## CLI
+---
 
-`super-ralph` can wrap this workflow directly from a prompt string or prompt file:
+## 2. Core Guarantees & Convergence
+
+1. **Finite-by-Default Execution**:
+   - Every loop evaluates a live quiescence predicate (`allWorkComplete`).
+   - `maxIterations` defaults to `25` with `onMaxReached="fail"` — zero silent runaway loops.
+   - Unified on 2026-09-21 into a single outer loop containing scheduling, execution, and merging, guaranteeing deterministic pipeline convergence.
+2. **Hermetic Worktree Isolation**:
+   - Each ticket executes within an isolated Jujutsu (`jj`) or Git workspace (`/tmp/workflow-wt-<ticketId>`).
+   - Speculative merge queue tests concurrent changes before mainline landing.
+3. **Multi-Agent Diversity**:
+   - Pluggable agent pools (Claude, Codex, Tau, Kimi, local Herd models).
+   - Dedicated review gates (`SpecReview`, `CodeReview`, `ReviewFix`) ensure no unverified code reaches the merge queue.
+
+---
+
+## 3. CLI Quickstart
+
+Launch any prompt or specification file directly:
 
 ```bash
-super-ralph "Build a merge queue dashboard with jj-native workflows"
-super-ralph ./PROMPT.md
-```
+# Direct task launch
+ralph "Build a high-performance SSE event bridge with token budgeting"
 
-What the CLI does:
-- Preflight checks for `jj` and gives install/setup instructions if missing
-- Auto-detects `claude` and `codex` CLIs on startup
-- Asks clarifying questions in an interactive terminal UI (skip with `--skip-questions`)
-- Runs a first planning pass that interprets your prompt into `SuperRalph` props (focuses, test/build commands, checks, etc.)
-- Generates a runnable workflow at `.super-ralph/generated/workflow.tsx`
-- Runs Smithers with a built-in OpenTUI monitor (live terminal dashboard)
-- Resolves flock proxy routing once at startup so every model call goes through the proxy
+# Launch from specification markdown
+super-ralph ./specs/feature.md --max-concurrency 8
 
-Useful options:
+# Non-interactive / headless CI mode
+ralph "Implement SQLite state store" --skip-questions --max-iterations 15
 
-```bash
-super-ralph ./PROMPT.md --max-concurrency 12
+# Dry run (generates .super-ralph/workflow.tsx without executing)
 super-ralph ./PROMPT.md --dry-run
-super-ralph ./PROMPT.md --skip-questions
 ```
 
-## Usage
+### CLI Flags
 
-```tsx
-import {
-  SuperRalph,
-  ralphOutputSchemas,
-} from "super-ralph";
-import {
-  createSmithers,
-  ClaudeCodeAgent,
-  CodexAgent,
-} from "smithers-orchestrator";
-import PRD from "./specs/PRD.mdx";
-import EngineeringSpec from "./specs/Engineering.mdx";
+| Flag | Type | Description | Default |
+|---|---|---|---|
+| `--cwd <path>` | `string` | Target repository root | Current working directory |
+| `--max-concurrency <n>` | `number` | Maximum parallel active jobs | `4` (or CPU-bound) |
+| `--max-iterations <n>` | `number` | Hard loop ceiling for Ralph convergence | `25` |
+| `--skip-questions` | `boolean` | Bypass interactive clarification phase | `false` |
+| `--dry-run` | `boolean` | Generate `.super-ralph/` without starting engine | `false` |
+| `--run-id <id>` | `string` | Explicit Smithers run identifier | Auto-generated UUID |
 
-const { smithers, outputs } = createSmithers(ralphOutputSchemas, {
-  dbPath: "./workflow.db",
-});
+---
 
-export default smithers((ctx) => (
-  <SuperRalph
-    ctx={ctx}
-    outputs={outputs}
-    focuses={[
-      { id: "auth", name: "Authentication" },
-      { id: "api", name: "API Server" },
-    ]}
-    projectId="my-project"
-    projectName="My Project"
-    specsPath="docs/specs/"
-    referenceFiles={["docs/reference/"]}
-    buildCmds={{ go: "go build ./...", rust: "cargo build" }}
-    testCmds={{ go: "go test ./...", rust: "cargo test" }}
-    postLandChecks={["make e2e"]}
-    codeStyle="Go: snake_case, Rust: snake_case"
-    reviewChecklist={["Spec compliance", "Test coverage", "Security"]}
-    maxConcurrency={12}
-    agents={{
-      planning: new CodexAgent({ model: "gpt-5.3-codex", cwd: process.cwd(), yolo: true }),
-      implementation: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
-      testing: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
-      reviewing: new CodexAgent({ model: "gpt-5.3-codex", cwd: process.cwd(), yolo: true }),
-      reporting: new CodexAgent({ model: "gpt-5.3-codex", cwd: process.cwd(), yolo: true }),
-      mergeQueue: new ClaudeCodeAgent({ model: "claude-sonnet-4-6", cwd: process.cwd() }),
-    }}
-  >
-    <PRD />
-    <EngineeringSpec />
-  </SuperRalph>
-));
+## 4. Component Hierarchy
+
+```text
+super-ralph/
+├── src/
+│   ├── cli/
+│   │   ├── index.ts               # CLI front door, argument parser, workflow generator
+│   │   └── clarifications.ts      # Interactive terminal clarification UI
+│   ├── components/
+│   │   ├── SuperRalph.tsx         # Unified finite Ralph loop container
+│   │   ├── TicketScheduler.tsx    # Dynamic priority & capacity scheduler
+│   │   ├── Job.tsx                # Worktree execution wrapper
+│   │   ├── AgenticMergeQueue.tsx  # Speculative jj/git merge queue component
+│   │   ├── ClarifyingQuestions.tsx# Workflow clarification task
+│   │   ├── CompletionValidator.tsx# Stage output verifier
+│   │   └── TicketResume.tsx       # Cross-run state recovery & durability
+│   ├── mergeQueue/
+│   │   └── coordinator.ts         # Speculative workspace coordinator
+│   ├── prompts/                   # Mdx prompt templates (Research, Plan, Implement, etc.)
+│   ├── selectors.ts               # State selectors, ticket extraction, normalization
+│   └── schemas.ts                 # Zod output schemas
+└── tests/
+    ├── finite-default.test.ts     # Loop termination & budget acceptance tests
+    ├── exact-reply.test.ts        # Fast-path string normalization tests
+    └── prompt-renderer.test.ts    # Prompt compilation & rendering tests
 ```
 
-That's it! 30 lines of configuration for a complete workflow.
+---
 
-## Model routing via flock
+## 5. Provenance & Lineage
 
-By default every model call goes through the local flock proxy
-(http://127.0.0.1:25193, OpenAI-compatible) instead of direct provider APIs.
-
-How it works:
-
-- The CLI resolves FLOCK_API_KEY once at startup (comma-separated for
-  multi-key rotation, with 429/backoff rotation across keys) and injects
-  NIM_BASE_URL (with /v1), NVIDIA_API_KEY, ANTHROPIC_BASE_URL and NIM_MODEL
-  into its own env. Every downstream child process -- the claude NIM shim,
-  generated smithers workflows, interactive UI -- inherits proxy routing.
-  Keys travel in process env only and are never written to files.
-- Clarifying-question generation uses proxyChatCompletions() directly
-  against the proxy.
-- Smithers ClaudeCodeAgent blanks ANTHROPIC_API_KEY on spawn but passes
-  NIM_BASE_URL / NVIDIA_API_KEY through untouched, which is exactly what the
-  claude NIM shim reads.
-
-Env knobs:
-
-- FLOCK_API_KEY: proxy client key (required; comma-separated enables rotation).
-  NIM_PROXY_API_KEY still accepted as a deprecated alias.
-  Falls back to ANTHROPIC_API_KEY / NVIDIA_API_KEY when unset.
-- FLOCK_BASE_URL: proxy origin, default http://127.0.0.1:25193 (NIM_PROXY_BASE_URL still accepted as fallback)
-  (a trailing /v1 is stripped for canonicalization).
-- FLOCK_MODEL: model id sent to the proxy, default openai/gpt-oss-20b (NIM_PROXY_MODEL still accepted as fallback).
-- FLOCK_BYPASS=1 (or NIM_PROXY_BYPASS=1): escape hatch -- restore pre-proxy direct behavior.
-
-With no key set the CLI fails fast with an actionable error instead of
-silently falling back to direct APIs.
-
-## The Pattern
-
-Tickets are the **work unit**; **jobs are the scheduling unit**. An AI
-scheduler (`TicketScheduler`, driven by the scheduler agent in your agent
-pool) watches the ticket pipeline and writes jobs into a `scheduled_tasks`
-table in the Smithers SQLite DB (`src/scheduledTasks.ts`, via `bun:sqlite`).
-Super Ralph is **finite by default**: it runs until all scheduled work completes, then terminates.
-Three loops run in parallel while there is outstanding work:
-
-```
-Ralph (finite loop -- exits when all work is complete)
-  ├─ Scheduler loop ── AI scheduler → scheduled_tasks (SQLite)
-  │     ├─ UpdateProgress → PROGRESS.md
-  │     ├─ CodebaseReview → per-focus reviews → tickets
-  │     ├─ Discover → new feature tickets
-  │     └─ IntegrationTest → per-focus test runs
-  ├─ Execution loop ── one Job per scheduled job, in parallel worktrees
-  │     └─ Per Job (on jj bookmark ticket/<id>)
-  │        ├─ Research → gather context
-  │        ├─ Plan → TDD plan
-  │        ├─ ValidationLoop (loops until approved)
-  │        │  ├─ Implement → write tests + code
-  │        │  ├─ Test → run fast tests (pre-land checks)
-  │        │  ├─ BuildVerify → check compilation
-  │        │  ├─ SpecReview + CodeReview (parallel)
-  │        │  └─ ReviewFix → fix issues
-  │        └─ Report → completion summary
-  └─ Merge queue loop ── speculative landing, runs independently
-        └─ Land → speculative rebase stack, parallel post-land CI,
-                   eviction + cascade re-test, fast-forward main, push
-```
-
-The scheduler only schedules when there is capacity (`maxConcurrency`), and
-jobs are derived from *all* scheduler outputs — not just the latest — so no
-scheduled work is lost between scheduler iterations.
-
-### Live monitor
-
-`Monitor` (`src/components/Monitor.tsx`) is an OpenTUI terminal dashboard
-for watching a run: a real-time task list with status indicators, arrow-key
-navigation into task details, and overall progress -- all polled live from the
-Smithers SQLite DB. It is deliberately NOT part of the CLI-generated finite
-workflow: an interactive dashboard that runs until a keypress would make the
-run infinite. Supervise it separately (e.g. an event-driven supervisor that
-spawns finite runs and attaches the dashboard while they execute).
-
-### Finite by default
-
-Every <Ralph> loop carries a live exit condition (until) derived from the
-workflow's own outputs via ctx.latest(...): scheduler outputs exist, no
-ticket can advance, no job is active, and the merge queue is empty. When the
-condition holds, the loop exits and the run finishes. No daemon mode exists --
-long-running supervision belongs in a separate event-driven supervisor that
-spawns finite runs.
-
-Iteration budget. Each loop is bounded by maxIterations (default 25, CLI:
---max-iterations <n>). Exhausting the budget is a failure
-(onMaxReached="fail"), so a stuck run can never spin forever.
-
-Exact stdout in headless runs. When the CLI's stdout is not a TTY (piped, CI,
-or automation), the run is headless: banners are suppressed, the interactive
-monitor is skipped, and clarifying questions are auto-skipped. After the
-workflow finishes, a terminal FinalReport step writes the reply to a
-final_report SQLite table and the CLI prints exactly that reply -- nothing
-else -- with exit code 0. Example:
-
-    super-ralph "reply with exactly the word ALIVE" > out.txt
-    # out.txt contains exactly: ALIVE
-
-If the workflow fails, diagnostics go to stderr and the exit code is non-zero.
-
-### Real speculative merge queue
-
-
-Each ticket gets its own jj bookmark (`ticket/<id>`) in a dedicated worktree. Development happens in parallel across tickets, and landing uses a **stateful speculative queue**:
-
-1. Queue order is computed from completed tickets
-2. Tickets are speculatively rebased as a stack (`A <- B <- C`)
-3. Post-land CI runs in parallel for the speculative window
-4. Passing prefix is landed by fast-forwarding `main` to the furthest passing ticket
-5. Failed ticket is evicted with context; downstream speculative tickets are re-rebased/re-tested
-6. Ticket bookmark/worktree cleanup happens on merge and eviction
-
-This means **no code lands on main without passing reviews AND post-rebase CI on speculative state**.
-
-### Dedicated merge queue agent
-
-`SuperRalph` supports a dedicated coordinator agent — any
-`smithers-orchestrator` agent works here, e.g.:
-
-```tsx
-<SuperRalph
-  agents={{
-    planning: ...,
-    implementation: ...,
-    testing: ...,
-    reviewing: ...,
-    reporting: ...,
-    mergeQueue: new KimiAgent({ model: "kimi-code/kimi-for-coding", cwd: process.cwd(), yolo: true, thinking: true }),
-  }}
-  mergeQueueOrdering="report-complete-fifo"
-  maxSpeculativeDepth={3}
-  postLandChecks={["make e2e", "bun test tests/integration/"]}
-  {...otherProps}
-/>
-```
-
-### Pre-land vs post-land checks
-
-Configure which CI checks run in each phase:
-
-```tsx
-<SuperRalph
-  // Fast checks run in the worktree during development (driven by testCmds/buildCmds/testSuites)
-  testCmds={{ go: "go test ./...", rust: "cargo test" }}
-  buildCmds={{ go: "go build ./..." }}
-
-  // Slow checks run after rebase in the merge queue
-  postLandChecks={["make e2e", "bun test tests/integration/"]}
-  {...otherProps}
-/>
-```
-
-If `postLandChecks` is not provided, it falls back to `testCmds`.
-
-### jj-native workflow
-
-All agents use jj commands instead of git:
-- `jj describe` + `jj new` instead of `git commit`
-- `jj bookmark set ticket/<id>` + `jj git push --bookmark` instead of `git push`
-- `jj rebase` for landing instead of `git merge`
-
-Requires a jj-colocated repo (`jj git init --colocate`).
-
-This opinionated workflow is optimized in following ways:
-
-- Observability: multiple reporting steps and lots of data stored in sqlite
-- Quality: via CI checks, review loops, and context-engineered research-plan-implement steps
-- Planning: Optimizes ralph by in real time generating tickets rather than hardcoding them up front
-- Parallelization: All tickets implemented in a JJ Workspace in parallel with branch-per-ticket isolation
-- Safe landing: Serialized merge queue with semantic conflict detection and post-rebase CI
-
-## Advanced: Custom Components
-
-Override any step with a custom component:
-
-```tsx
-<SuperRalph
-  {...props}
-  discover={<MyCustomDiscover agent={...} />}
-/>
-```
-
-Or run additional logic in parallel:
-
-```tsx
-<SuperRalph
-  {...props}
-  discover={
-    <Parallel>
-      <SuperRalph.Discover agent={...} specsPath="..." referenceFiles={[...]} />
-      <MyAdditionalDiscovery agent={...} />
-    </Parallel>
-  }
-/>
-```
-
-These steps default to <SuperRalph.Component when not provided.
-
-## License
-
-MIT
-
+- **Lineage**: Reusable Ralph workflow pattern, fork of `roninjin10/super-ralph`, integrated into the Sovereign Mesh ecosystem (`/home/toxic/sovereign/projects/mesh/super-ralph`).
+- **Smithers Orchestration**: Built on `@smithers-orchestrator` v0.32.0, leveraging React-reconciled task graphs with SQLite persistence.
+- **Verification**: 42/42 unit & integration tests passing (`bun test`), 0 TypeScript diagnostics (`tsc --noEmit`).

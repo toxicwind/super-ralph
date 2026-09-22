@@ -1,4 +1,4 @@
-import type { SmithersCtx } from "smithers-orchestrator";
+import type { SmithersCtx } from "../selectors";
 import { selectAllTickets, selectReviewTickets, selectProgressSummary } from "../selectors";
 
 export type SuperRalphContext = {

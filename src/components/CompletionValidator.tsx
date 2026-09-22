@@ -1,6 +1,6 @@
 import React from "react";
 import { Task } from "smithers-orchestrator";
-import type { SmithersCtx } from "smithers-orchestrator";
+import type { SmithersCtx } from "../selectors";
 import { z } from "zod";
 import { selectProgressSummary } from "../selectors";
 import { detectExactReply, normalizeReply } from "../exactReply";

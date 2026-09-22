@@ -796,7 +796,7 @@ async function main() {
     console.log("📋 Non-interactive stdin detected — skipping clarifying questions.\n");
   }
   if (!questionsExplicitlySkipped && interactiveStdin) {
-    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"], proxyConfig);
+    clarificationSession = await runClarifyingQuestions(promptText, repoRoot, packageScripts, parsed.flags["dry-run"] === true, proxyConfig);
   }
 
   // Finite-by-default: Ralph loop iteration ceiling (backstop; the real exit

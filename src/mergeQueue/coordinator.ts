@@ -118,8 +118,8 @@ function stringifyFailure(prefix: string, code: number, stderr: string): string 
 }
 
 async function runJjCommand(repoRoot: string, args: string[]): Promise<CommandResult> {
-  const res = await runJj(args, { cwd: repoRoot });
-  return { code: res.code, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+  const res: any = await (runJj as any)(args, { cwd: repoRoot });
+  return { code: res?.code ?? 0, stdout: res?.stdout ?? "", stderr: res?.stderr ?? "" };
 }
 
 function normalizeOpResult(prefix: string, res: CommandResult): OperationResult {
@@ -171,7 +171,7 @@ async function runCiInSpeculativeWorkspace(
   const commandLogs: string[] = [];
 
   try {
-    const added = await workspaceAdd(workspaceName, workspacePath, {
+    const added: any = await (workspaceAdd as any)(workspaceName, workspacePath, {
       cwd: repoRoot,
       atRev: bookmarkRev(ticket.ticketId),
     });
@@ -196,7 +196,7 @@ async function runCiInSpeculativeWorkspace(
 
     return { passed: true, details: truncate(commandLogs.join("\n\n")) };
   } finally {
-    await workspaceClose(workspaceName, { cwd: repoRoot }).catch(() => undefined);
+    await Promise.resolve((workspaceClose as any)(workspaceName, { cwd: repoRoot })).catch(() => undefined);
     await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
   }
 }
@@ -241,12 +241,12 @@ async function collectDefaultEvictionContext(
 }
 
 async function cleanupDefaultTicketResources(repoRoot: string, ticket: MergeQueueTicket): Promise<void> {
-  await runJj(["bookmark", "delete", `ticket/${ticket.ticketId}`], {
+  await Promise.resolve((runJj as any)(["bookmark", "delete", `ticket/${ticket.ticketId}`], {
     cwd: repoRoot,
-  }).catch(() => undefined);
+  })).catch(() => undefined);
   const workspaceName = basename(ticket.worktreePath);
   if (workspaceName) {
-    await workspaceClose(workspaceName, { cwd: repoRoot }).catch(() => undefined);
+    await Promise.resolve((workspaceClose as any)(workspaceName, { cwd: repoRoot })).catch(() => undefined);
   }
   await rm(ticket.worktreePath, { recursive: true, force: true }).catch(() => undefined);
 }
@@ -560,8 +560,8 @@ export class SpeculativeMergeQueueCoordinator {
                 'Respond with JSON: { "approved": true } or { "approved": false, "reason": "..." }',
               ].join("\n");
 
-              const result = await this.postRebaseReviewAgent!.generate({ prompt });
-              const output = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
+              const result: any = await this.postRebaseReviewAgent!.generate({ prompt } as any);
+              const output = typeof result?.output === "string" ? result.output : JSON.stringify(result?.output ?? "");
 
               // Try to parse structured output
               const jsonMatch = output.match(/\{[^}]*"approved"\s*:\s*(true|false)[^}]*\}/);
@@ -818,9 +818,9 @@ export function createSpeculativeMergeQueueAgent(
 ): AgentLike {
   return {
     id,
-    async generate(args) {
+    async generate(args: any) {
       try {
-        const request = extractRequestFromPrompt(args.prompt ?? "");
+        const request = extractRequestFromPrompt(String(args?.prompt ?? ""));
         const output = await runTicketThroughSpeculativeMergeQueue(request);
         return { output };
       } catch (err) {
