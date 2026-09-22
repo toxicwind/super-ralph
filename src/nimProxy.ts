@@ -23,7 +23,11 @@
  * Stats and errors use opaque "key#N" labels only.
  */
 
-export const DEFAULT_PROXY_BASE_URL = "http://127.0.0.1:25104";
+const DEFAULT_ROUTER_PORT = process.env.SOVEREIGN_ROUTER_PORT || "25104";
+export const DEFAULT_PROXY_BASE_URL =
+  process.env.SOVEREIGN_ROUTER_URL ||
+  process.env.FLOCK_BASE_URL ||
+  `http://127.0.0.1:${DEFAULT_ROUTER_PORT}`;
 export const DEFAULT_PROXY_MODEL = "free";
 const DEFAULT_RETRY_AFTER_MS = 60_000;
 
